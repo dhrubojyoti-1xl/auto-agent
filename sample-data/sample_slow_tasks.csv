@@ -1,0 +1,6 @@
+Task_ID,Date,Department,Employee,Task,Task_Category,Task_Status,Expected_Duration,Actual_Duration,Variance_Hours,Variance_Pct,Duration_Basis,Link,Updated_At
+TSK-130510CB13,2026-08-24,Sales,Rahul Mehta,Prepare proposal for Acme Ltd,Proposal,In Progress,3,7.5,4.5,150,Derived,https://docs.example.com/prop-acme,2026-08-29
+TSK-0CD4A772F5,2026-08-24,Marketing,Sana Qureshi,Design creatives for festive campaign,Content Creation,In Progress,4,8.5,4.5,112.5,Derived,,2026-08-29
+TSK-B61530D0BF,2026-08-26,Sales,Imran Khan,Client call - Corvin onboarding,Client Call,Completed,1,2.75,1.75,175,Derived,,2026-08-29
+TSK-AF335A23F2,2026-08-24,Operations,Ayesha Siddiqui,Resolve support ticket #4412,Support Ticket,Completed,1,2.5,1.5,150,Derived,https://help.example.com/t/4412,2026-08-29
+TSK-06C5AD5985,2026-08-24,Operations,Vikas Nair,Process customer orders,Order Processing,Completed,0.75,1.5,0.75,100,Derived,,2026-08-29

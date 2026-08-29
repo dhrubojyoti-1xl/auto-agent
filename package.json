@@ -1,0 +1,13 @@
+{
+  "name": "auto-agent",
+  "version": "1.0.0",
+  "description": "Free-first department report automation: Gmail -> Google Apps Script -> Google Sheets -> Looker Studio, with an optional AI summary layer.",
+  "private": true,
+  "scripts": {
+    "test": "node tools/run-tests.js",
+    "test:verbose": "node tools/run-tests.js --verbose",
+    "export": "node tools/export-fixtures.js"
+  },
+  "engines": { "node": ">=16" },
+  "license": "UNLICENSED"
+}

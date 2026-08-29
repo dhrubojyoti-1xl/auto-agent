@@ -1,0 +1,28 @@
+SYSTEM STATUS
+
+INGESTION
+  Last email processing : 2026-08-29 14:59
+  Emails processed      : 5  (SUCCESS: 3, PARTIAL: 2)
+  Rows extracted        : 80
+  Tasks imported        : 57
+  Tasks in database     : 57
+  Tasks rejected        : 23
+  Duplicates detected   : 18
+  Skipped as idempotent : 0
+  Data_Quality rows     : 23
+
+PROCESSING
+  Last metrics rebuild  : 2026-08-29 14:59
+  Last report generated : 2026-08-29 14:59 (DAILY)
+
+AI
+  Enabled               : no
+  Provider              : manual
+  API key stored        : no
+
+AUTOMATION
+  Gmail search          : label:DAILY_REPORT -label:REPORT_PROCESSED newer_than:30d
+  Triggers installed    : none
+
+HEALTH
+  Last error            : none

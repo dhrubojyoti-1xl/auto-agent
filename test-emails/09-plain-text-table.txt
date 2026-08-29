@@ -1,0 +1,7 @@
+Hi team, todays report:
+
+Date | Employee | Task | Status | Link
+29 Aug 2026 | Rahul Mehta | Update CRM | Completed | https://crm.example.com/1
+29 Aug 2026 | Priya Sharma | Follow up with Acme | Pending |
+
+Regards

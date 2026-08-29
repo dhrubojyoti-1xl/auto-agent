@@ -1,0 +1,48 @@
+Key,Value,Description
+SPREADSHEET_ID,,Leave blank when the script is bound to this sheet.
+TIMEZONE,Asia/Kolkata,
+SEARCH_QUERY,label:DAILY_REPORT -label:REPORT_PROCESSED newer_than:30d,Gmail search that finds candidate report emails.
+REPORT_LABEL,DAILY_REPORT,Label you apply (manually or via a Gmail filter) to report emails.
+PROCESSED_LABEL,REPORT_PROCESSED,Applied by the script after a successful import.
+ERROR_LABEL,REPORT_ERROR,Applied when the whole email failed to process.
+REVIEW_LABEL,REPORT_REVIEW,Applied when some rows were rejected but others imported.
+MAX_EMAILS_PER_RUN,50,Safety cap per execution.
+MAX_RUNTIME_MS,240000,
+ALLOWED_SENDER_DOMAINS,,Comma separated. Blank = accept any domain.
+ALLOWED_SENDERS,,Comma separated exact addresses. Blank = any.
+SUBJECT_MUST_CONTAIN_ANY,,Comma separated phrases. Blank = no subject filter.
+REQUIRE_KNOWN_TABLE_HEADER,TRUE,
+DATE_ORDER,DMY,DMY or MDY — how to read ambiguous 04/05/2026 dates.
+MIN_TASK_LENGTH,3,
+MAX_ROWS_PER_EMAIL,2000,
+PARSE_PLAINTEXT_PIPE_TABLES,TRUE,
+MIN_HEADER_MATCHES,3,
+REJECT_UNKNOWN_STATUS,TRUE,TRUE = park unknown statuses in Data_Quality.
+REJECT_UNKNOWN_EMPLOYEE,FALSE,
+AUTO_CREATE_EMPLOYEES,TRUE,
+AUTO_CREATE_DEPARTMENTS,TRUE,
+DEFAULT_DEPARTMENT,Unassigned,
+SLOW_TASK_MULTIPLIER,1.5,Slow when Actual > Expected x this value.
+REPEAT_LOOKBACK_DAYS,30,
+REPEAT_RECURRING_MIN,3,Distinct dates before a task counts as Recurring.
+REPEAT_HIGH_MIN,8,Occurrences before a task counts as Highly Repetitive.
+REPEAT_SAME_DAY_REVIEW_MIN,3,
+SIMILARITY_THRESHOLD,0.88,
+AI_ENABLED,FALSE,FALSE keeps the whole system working without any AI.
+AI_PROVIDER,manual,manual | gemini | custom_http
+AI_MODEL,gemini-2.0-flash,
+AI_ENDPOINT,,
+AI_MAX_RETRIES,1,
+AI_TIMEOUT_NOTE,UrlFetchApp has no timeout option; keep payloads small.,
+MANAGEMENT_EMAIL,,Where to email the summary. Blank = do not email.
+EMAIL_DAILY_REPORT,FALSE,
+EMAIL_WEEKLY_REPORT,FALSE,
+WEEK_START,MONDAY,
+TRIGGER_INGEST_EVERY_MINUTES,30,0 disables the ingest trigger. Else 5/10/15/30/60.
+TRIGGER_DAILY_HOUR,9,
+TRIGGER_WEEKLY_DAY,MONDAY,
+TRIGGER_WEEKLY_HOUR,9,
+TRIGGER_MONTHLY_DAY,1,
+TRIGGER_MONTHLY_HOUR,9,
+LOG_LEVEL,INFO,
+LOG_MAX_ROWS,20000,

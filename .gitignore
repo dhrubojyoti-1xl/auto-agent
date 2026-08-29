@@ -1,0 +1,26 @@
+# dependencies (there are none, but never commit them if that changes)
+node_modules/
+
+# secrets — the AI API key lives in Apps Script PropertiesService, never here
+.env
+.env.local
+*.key
+*.pem
+credentials.json
+client_secret*.json
+
+# clasp (local Apps Script push config; contains your private script id)
+.clasp.json
+.clasprc.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# scratch
+*.log
+tmp/
+scratch/

@@ -1,0 +1,5 @@
+Department_ID,Department_Name,Name_Aliases,Manager,Manager_Email,Sender_Domains,Active
+DEP-01,Sales,"sales team,bd,business development",Anita Rao,,,TRUE
+DEP-02,Marketing,"mktg,growth,brand",Vikram Shah,,,TRUE
+DEP-03,Operations,"ops,operation,service delivery",Farhan Ali,,,TRUE
+DEP-99,Unassigned,,,,,TRUE

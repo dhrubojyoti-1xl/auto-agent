@@ -1,0 +1,11 @@
+Employee_ID,Employee_Name,Name_Aliases,Department,Active,Joining_Date,Role,Email
+EMP-001,Rahul Mehta,"rahul,rahul m",Sales,TRUE,2024-04-01,Sales Executive,
+EMP-002,Priya Sharma,priya,Sales,TRUE,2023-11-15,Key Account Manager,
+EMP-003,Imran Khan,imran,Sales,TRUE,2025-01-06,Sales Executive,
+EMP-004,Neha Gupta,neha,Marketing,TRUE,2024-07-22,Content Lead,
+EMP-005,Arjun Patel,"arjun,arjun p",Marketing,TRUE,2025-03-03,Performance Marketer,
+EMP-006,Sana Qureshi,sana,Marketing,TRUE,2024-09-09,Designer,
+EMP-007,Vikas Nair,vikas,Operations,TRUE,2022-06-13,Ops Executive,
+EMP-008,Deepa Iyer,deepa,Operations,TRUE,2023-02-20,Ops Coordinator,
+EMP-009,Rohit Verma,rohit,Operations,TRUE,2025-05-05,Dispatch Executive,
+EMP-010,Ayesha Siddiqui,"ayesha,ayesha s",Operations,TRUE,2024-12-01,Support Executive,

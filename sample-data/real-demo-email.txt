@@ -1,0 +1,26 @@
+Subject: Daily Report - Sales, Marketing, Operations
+
+Hi Sir,
+
+Please find today's consolidated report below.
+
+Date | Employee Name | Task | Status | Link | Start Time | End Time
+29 Aug 2026 | Rahul Mehta | Update CRM with new leads | Completed | https://crm.example.com/leads/992 | 09:15 | 09:50
+29 Aug 2026 | Priya Sharma | Follow up with key account Acme | In Progress |  |  | 
+29 Aug 2026 | Priya Sharma | Client call | Completed |  |  | 
+29 Aug 2026 | Priya Sharma | Client call | Completed |  |  | 
+29 Aug 2026 | Priya Sharma | Client call | In Progress |  |  | 
+29 Aug 2026 | Imran Khan | Client call - Corvin onboarding | Done |  | 15:00 | 17:45
+29 Aug 2026 | Imran Khan | Send quotation to Delta Industries | Pending |  |  | 
+29 Aug 2026 | Neha Gupta | Write blog post: SEO basics | Completed | https://blog.example.com/seo |  | 
+29 Aug 2026 | Arjun Patel | Google Ads campaign optimisation | WIP |  |  | 
+29 Aug 2026 | Sana Qureshi | Design creatives for festive campaign | In Progress |  | 09:30 | 18:00
+29 Aug 2026 | Vikas Nair | Process customer orders | Complete |  | 08:45 | 10:15
+29 Aug 2026 | Deepa Iyer | Prepare daily report | Done |  |  | 
+29 Aug 2026 | Rohit Verma | Dispatch shipments | In progress |  |  | 
+29 Aug 2026 | Ayesha Siddiqui | Resolve support ticket #4412 | Completed | https://help.example.com/t/4412 | 09:00 | 11:30
+29 Aug 2026 | Rohit Verma | Stock audit | Compleeted!! |  |  | 
+29 Aug 2026 |  | Unassigned housekeeping task | Pending |  |  | 
+
+Regards,
+Team

@@ -1,0 +1,4 @@
+Department,Total_Tasks,Completed,In_Progress,Pending,Blocked,Cancelled,Not_Started,Completion_Rate,Slow_Tasks,Repeated_Tasks,Employees_Reporting,First_Report_Date,Last_Report_Date,Last_7d_Tasks,Prev_7d_Tasks,Last_7d_Completion_Rate,Prev_7d_Completion_Rate,WoW_PP_Change,Updated_At
+Marketing,15,7,6,0,0,1,1,46.7,1,7,3,2026-08-24,2026-08-28,15,0,46.7,0,,2026-08-29
+Operations,24,19,2,1,1,0,1,79.2,2,22,4,2026-08-24,2026-08-28,24,0,79.2,0,,2026-08-29
+Sales,18,11,5,1,1,0,0,61.1,2,10,3,2026-08-24,2026-08-28,18,0,61.1,0,,2026-08-29

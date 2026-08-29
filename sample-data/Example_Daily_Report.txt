@@ -1,0 +1,118 @@
+DAILY DEPARTMENT REPORT
+Period: 2026-08-28
+Generated: 2026-08-29 14:59
+
+EXECUTIVE SUMMARY
+
+13 task(s) were reported by 3 department(s) and 8 employee(s) in this period, of which 6 are marked Completed (46.2%). The previous comparable period had 11 task(s) at 63.6% completion, a change of -17.4 percentage points. No task exceeded its expected duration threshold; 11 task(s) lack the timestamps needed to judge duration.
+
+Overall Performance:
+  46.2% completion
+
+Total Tasks:
+  13
+
+Completed:
+  6
+
+Pending:
+  0
+
+In Progress:
+  5
+
+Blocked: 1   Not Started: 0   Cancelled: 1
+
+Versus 2026-08-27 to 2026-08-27:
+  Tasks: 11 → 13 (+2)
+  Completion rate: 63.6% → 46.2% (-17.4 percentage points)
+
+
+DEPARTMENT PERFORMANCE
+
+Marketing:
+  0%  (0 of 3 completed, 0 pending, 2 in progress, 2 employee(s) reporting)
+
+Operations:
+  75%  (3 of 4 completed, 0 pending, 1 in progress, 3 employee(s) reporting)
+
+Sales:
+  50%  (3 of 6 completed, 0 pending, 2 in progress, 3 employee(s) reporting)
+
+
+AREAS REQUIRING ATTENTION
+
+1. 1 repeated-task group(s) need a human check
+   Why it matters: Several identical rows on one day may be genuine batched work or a reporting artefact. The system does not guess.
+   Supporting data: Priya Sharma: "Client call" x3
+   Suggested action: Open the Repeated Tasks dashboard page and confirm with the reporter.
+2. 6 row(s) were rejected at import
+   Why it matters: Rejected rows are missing from every metric on the dashboard.
+   Supporting data: {"DUPLICATE_ACROSS_EMAILS":6}
+   Suggested action: Open the Data_Quality sheet, fix the source format or add the missing alias, then re-send the email.
+
+
+SLOW TASKS
+
+None identified. 11 of 13 task(s) have no usable start/completion timestamps, so their duration is unknown and they are excluded from slow-task analysis.
+
+
+REPEATED TASK PATTERNS
+
+Task:           Prepare daily report
+Employee:       Deepa Iyer
+Occurrences:    10 across 5 date(s)
+Classification: Highly Repetitive
+
+Task:           Update CRM with new leads
+Employee:       Rahul Mehta
+Occurrences:    5 across 5 date(s)
+Classification: Recurring / Legitimate
+
+Task:           Google Ads campaign optimisation
+Employee:       Arjun Patel
+Occurrences:    5 across 5 date(s)
+Classification: Recurring / Legitimate
+
+Task:           Process customer orders
+Employee:       Vikas Nair
+Occurrences:    5 across 5 date(s)
+Classification: Recurring / Legitimate
+
+Task:           Dispatch shipments
+Employee:       Rohit Verma
+Occurrences:    5 across 5 date(s)
+Classification: Recurring / Legitimate
+
+Task:           Client call
+Employee:       Priya Sharma
+Occurrences:    3 across 1 date(s)
+Classification: Needs Review
+
+Task:           Send quotation to Delta Industries
+Employee:       Imran Khan
+Occurrences:    2 across 2 date(s)
+Classification: Recurring / Legitimate
+
+
+KEY TRENDS
+
+- Task volume moved from 11 to 13 (+2).
+- Completion rate moved from 63.6% to 46.2% (-17.4 percentage points — not a percentage change).
+- Highest reported volume: Sales with 6 task(s).
+- 1 task pattern(s) are highly repetitive and may be automation candidates: "Prepare daily report".
+
+
+DATA QUALITY
+
+- Tasks in period: 13
+- Rows rejected during import: 6 (DUPLICATE_ACROSS_EMAILS: 6)
+- Tasks missing a link: 11
+- Tasks flagged for review: 0
+- Tasks without duration information: 11 (duration and efficiency cannot be measured for these)
+- Unclassified tasks: 1
+
+
+PROVENANCE
+- All counts, rates and flags above are computed by spreadsheet code, not by an AI.
+- AI commentary: disabled. Deterministic commentary used.

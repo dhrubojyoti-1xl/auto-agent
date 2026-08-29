@@ -1,0 +1,7 @@
+Status,Active,Counts_As_Completed,Is_Terminal,Sort_Order
+Completed,TRUE,TRUE,TRUE,1
+In Progress,TRUE,FALSE,FALSE,2
+Pending,TRUE,FALSE,FALSE,3
+Blocked,TRUE,FALSE,FALSE,4
+Not Started,TRUE,FALSE,FALSE,5
+Cancelled,TRUE,FALSE,TRUE,6

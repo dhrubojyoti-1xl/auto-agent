@@ -1,0 +1,14 @@
+Category_ID,Category_Name,Match_Keywords,Expected_Duration,Active,Notes
+CAT-01,CRM Update,"crm,salesforce,zoho,pipeline update",0.5,TRUE,
+CAT-02,Client Call,"client call,customer call,demo call,meeting with client",1,TRUE,
+CAT-03,Proposal,"proposal,quotation,quote,estimate,pitch deck",3,TRUE,
+CAT-04,Reporting,"daily report,mis,report preparation,dashboard update",1,TRUE,
+CAT-05,Content Creation,"blog,social post,creative,copy,newsletter",4,TRUE,
+CAT-06,Campaign Setup,"campaign,ads,adwords,meta ads,google ads",2.5,TRUE,
+CAT-07,Order Processing,"order,dispatch,invoice,shipment,packing",0.75,TRUE,
+CAT-08,Vendor Coordination,"vendor,supplier,procurement,purchase order",1.5,TRUE,
+CAT-09,Support Ticket,"ticket,support,complaint,escalation",1,TRUE,
+CAT-10,Internal Meeting,"standup,internal meeting,review meeting,sync",1,TRUE,
+CAT-11,Documentation,"sop,documentation,process doc,manual",2,TRUE,
+CAT-12,Data Entry,"data entry,excel,sheet update,upload",1,TRUE,
+CAT-99,Uncategorised,,,TRUE,Blank expected duration on purpose: unknown work must not be judged slow.
