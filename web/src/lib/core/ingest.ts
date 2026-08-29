@@ -12,7 +12,7 @@
  */
 import type {
   Cell, EngineConfig, Employee, Field, IngestResult, Masters, RejectedRow,
-  SourceDocument, TaskRecord
+  SourceDocument, Table, TaskRecord
 } from './types';
 import {
   cleanWhitespace, decodeEntities, findDepartmentInText, departmentFromSender,
@@ -263,8 +263,8 @@ export function ingestDocument(
   const reportId = 'RPT-' + shortHash(doc.documentId, 10).toUpperCase();
   const createdEmployees: Employee[] = [];
 
-  // 1. Candidate tables
-  let tables = doc.html ? extractTables(doc.html) : [];
+  // 1. Candidate tables. Pre-parsed tables (an attachment) win outright.
+  let tables = doc.tables?.length ? doc.tables : (doc.html ? extractTables(doc.html) : []);
   if (!tables.length) {
     tables = extractPipeTables(doc.text || (doc.html ? tagText(doc.html) : ''));
   }

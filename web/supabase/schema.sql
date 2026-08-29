@@ -337,3 +337,60 @@ begin
     execute format('alter table %I enable row level security', tbl);
   end loop;
 end $$;
+
+-- =============================================================================
+-- GMAIL CONNECTION (product flow: the manager connects their own inbox)
+-- =============================================================================
+-- One row per connected Google account. The refresh token is stored encrypted
+-- with AES-256-GCM (see src/lib/crypto.ts); the key lives only in the
+-- environment, so a database dump alone cannot read anyone's mailbox.
+create table if not exists gmail_accounts (
+  id                  bigserial primary key,
+  email               text not null unique,
+  google_sub          text not null unique,       -- stable Google user id
+  display_name        text,
+  picture_url         text,
+  refresh_token_enc   text not null,              -- AES-256-GCM, never plaintext
+  scopes              text[] not null default '{}',
+  connected_at        timestamptz not null default now(),
+  last_sync_at        timestamptz,
+  last_sync_status    text,
+  last_sync_message   text,
+  -- Only mail newer than this is considered, so connecting an old mailbox does
+  -- not drag in years of history on the first run.
+  sync_since          date not null default (current_date - 14),
+  active              boolean not null default true,
+  revoked_at          timestamptz
+);
+
+-- One row per sync attempt, so the dashboard can show what the assistant did
+-- without anyone reading logs.
+create table if not exists sync_runs (
+  id                bigserial primary key,
+  gmail_account_id  bigint references gmail_accounts(id) on delete cascade,
+  started_at        timestamptz not null default now(),
+  finished_at       timestamptz,
+  trigger           text not null default 'cron',   -- cron | manual | connect
+  status            text not null default 'RUNNING',-- RUNNING|OK|PARTIAL|FAILED
+  messages_scanned  int not null default 0,
+  reports_found     int not null default 0,
+  rows_imported     int not null default 0,
+  rows_rejected     int not null default 0,
+  rows_duplicate    int not null default 0,
+  error_message     text
+);
+create index if not exists idx_sync_runs_started on sync_runs (started_at desc);
+
+-- Which Gmail message produced which document, and what it looked like. Every
+-- scanned message gets a row even when it is not a report, so the next sync
+-- never re-downloads or re-parses it.
+alter table documents add column if not exists gmail_account_id bigint;
+alter table documents add column if not exists gmail_message_id text;
+alter table documents add column if not exists attachment_name text;
+create index if not exists idx_documents_gmail on documents (gmail_message_id);
+
+do $$
+begin
+  execute 'alter table gmail_accounts enable row level security';
+  execute 'alter table sync_runs enable row level security';
+end $$;

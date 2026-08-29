@@ -11,7 +11,8 @@
 | [TEST_PLAN.md](TEST_PLAN.md) | proving the system works |
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | something is wrong |
 | [DEMO_SCRIPT.md](DEMO_SCRIPT.md) | the Monday demo, minute by minute |
-| [WEB_APP.md](WEB_APP.md) | the hosted Next.js + Supabase version |
+| [WEB_APP.md](WEB_APP.md) | the hosted version and the automatic inbox flow |
+| [GOOGLE_OAUTH_SETUP.md](GOOGLE_OAUTH_SETUP.md) | one-time Google Cloud setup for Gmail access |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | deploying the web app to Supabase + Vercel |
 
 Start with the root [README.md](../README.md).

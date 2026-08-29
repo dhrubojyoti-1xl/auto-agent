@@ -1,8 +1,30 @@
 # The hosted web app (Next.js + Supabase + Anthropic)
 
-A second front end over the **same tested engine**. The Apps Script system
-remains complete on its own; this adds a hosted dashboard, a real database, and
-an API the Gmail automation can post to.
+## The product
+
+```
+Manager
+  → signs in
+  → clicks "Connect Gmail" once
+  → Google consent (read-only)
+  ────────────────────────────────── everything below is automatic, hourly
+  → the assistant reads their inbox
+  → decides which messages are reports, by content
+  → parses email bodies AND xlsx / csv attachments
+  → normalises, validates, deduplicates
+  → writes to Postgres
+  → rebuilds the dashboard
+  → regenerates the management summary
+```
+
+The manager never creates a label, a filter or a forward; never uploads or
+pastes a report; never runs a script or triggers a sync; never sees a database
+URL. Those are one-time administrator tasks
+([GOOGLE_OAUTH_SETUP.md](GOOGLE_OAUTH_SETUP.md),
+[DEPLOYMENT.md](DEPLOYMENT.md)).
+
+This is a second front end over the **same tested engine** as the Apps Script
+system, which remains complete on its own.
 
 ```
 $ cd web && npm test
@@ -17,7 +39,8 @@ $ cd web && npm test
 |---|---|---|
 | Database | Google Sheets | Postgres (Supabase) |
 | Dashboard | Looker Studio | built-in pages |
-| Ingestion | Gmail, directly | pasted reports **and** Gmail via the bridge |
+| Ingestion | Gmail, needs a label + `gmail.modify` | **Gmail OAuth, read-only, no labels** |
+| Attachments | not parsed | xlsx / xlsm / csv / tsv parsed |
 | Cost | free | free tiers; Anthropic is paid per call |
 | Duplicate protection | fingerprint in the sheet | fingerprint **plus a database unique constraint** |
 | AI | optional, off by default | optional, off by default |
@@ -177,22 +200,70 @@ createdb autoagent_test
 TEST_DATABASE_URL=postgres://localhost/autoagent_test npm test   # + database
 ```
 
-## 8. Connecting Gmail
+## 8. How automatic collection works
 
-The web app cannot read Gmail — only Google can, and only after you grant
-consent. Rather than authorising a second application, the Apps Script project
-you have already authorised forwards each report:
+### Connecting
 
-1. Web app: set `INGEST_TOKEN` (any long random string).
-2. Sheet: **Department Reporting → Web app bridge → Store ingest token**.
-3. Config sheet: `BRIDGE_ENABLED = TRUE`,
-   `BRIDGE_URL = https://<your-app>.vercel.app/api/ingest`.
-4. **Web app bridge → Test bridge connection.**
-5. Leave `BRIDGE_ONLY = FALSE` to write to both, or set it `TRUE` to make the
-   web app the only database.
+`/connect` → **Connect Gmail** → Google consent → done. The callback stores an
+encrypted refresh token and immediately kicks off the first sync, so the manager
+sees data without being told to press anything else.
 
-Idempotency holds across the whole chain: the Gmail message id is the document
-id, so a re-forwarded email inserts nothing.
+### Detecting reports without labels
+
+`src/lib/core/detect.ts` asks exactly one question of every message:
+
+> does it contain a table whose columns map to Date / Employee / Task / Status?
+
+That is the **same header mapper the importer uses**, so detection can never
+disagree with import: if it says "report", it will parse. Subject wording,
+sender and filenames are never used to reject a message — only to explain the
+decision. A report titled "hi" from an unknown address still counts.
+
+The Gmail search is deliberately broad (`after:<sync_since> -in:chats
+-in:drafts -category:promotions -category:social -category:forums`). Narrowing
+it further is how a real report gets silently skipped.
+
+### Attachments
+
+`src/lib/core/attachments.ts` turns `.xlsx/.xlsm` (via exceljs) and
+`.csv/.tsv` into the same `Table` shape the HTML parser produces, so everything
+downstream is unchanged. Every worksheet becomes a candidate table, because a
+workbook routinely holds one sheet per department; sheets that are not reports
+simply fail header mapping.
+
+Two details that matter:
+
+- Excel dates are read as real dates and emitted as `yyyy-mm-dd`. Stringifying
+  through a locale is how `03/04` flips between March and April.
+- The CSV parser is hand-written to RFC 4180 — quoted delimiters, escaped
+  quotes, embedded newlines. `split(',')` mangles exactly the rows people care
+  about: task descriptions containing commas.
+
+A test asserts the same report as CSV and as XLSX produces **identical
+fingerprints**, so the format it arrives in cannot create a duplicate.
+
+### Idempotency, at two levels
+
+| Level | Mechanism | Effect |
+|---|---|---|
+| Message | every scanned Gmail id gets a `documents` row | a message is never downloaded or parsed twice |
+| Row | `task_fingerprint` + the unique constraint | a report re-sent under a new message id imports nothing |
+
+So a sync that dies halfway is simply re-run, and forwarding a report to
+yourself changes nothing.
+
+### The unattended loop
+
+`vercel.json` registers `GET /api/cron/sync` hourly, authorised with
+`CRON_SECRET`. It syncs every connected inbox, rebuilds the analysis, and
+regenerates the management summary **only when something changed**.
+
+### When a grant is revoked
+
+`refreshAccessToken` distinguishes `invalid_grant` from other failures and the
+sync reports `REAUTH_REQUIRED` rather than failing anonymously; the Inbox page
+shows a reconnect prompt. A mid-flight Gmail 401 invalidates the cached access
+token and retries once before concluding the same.
 
 ## 9. What this does not do
 

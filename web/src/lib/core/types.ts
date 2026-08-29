@@ -144,7 +144,7 @@ export interface RejectedRow {
   raw: Record<string, string>;
 }
 
-/** A document is an email, a pasted report, or an uploaded file. */
+/** A document is an email, one attachment of an email, or a pasted report. */
 export interface SourceDocument {
   documentId: string;
   subject: string;
@@ -152,6 +152,15 @@ export interface SourceDocument {
   receivedAt: string;           // ISO
   html?: string;
   text?: string;
+  /**
+   * Pre-parsed tables, used when the content did not arrive as HTML or text —
+   * an XLSX attachment, for example. When present these are used verbatim and
+   * html/text are ignored, so a spreadsheet and an inline table travel through
+   * exactly the same validation, normalisation and deduplication path.
+   */
+  tables?: Table[];
+  /** Filename when this document is an attachment rather than a body. */
+  attachmentName?: string;
 }
 
 export interface IngestResult {

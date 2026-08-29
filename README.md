@@ -99,6 +99,21 @@ docs/                architecture, setup, Gmail, schema, dashboard, AI, tests,
                      troubleshooting, demo script, web app, deployment
 ```
 
+## The product flow (hosted app)
+
+```
+Manager signs in → Connect Gmail (once) → read-only Google consent
+        ↓  everything below is automatic, hourly
+  reads their inbox → detects reports by CONTENT, not labels
+  → parses email bodies and xlsx/csv attachments
+  → normalises, validates, deduplicates → Postgres
+  → dashboard updates → AI management summary
+```
+
+No labels, no forwarding, no uploads, no scripts, no database URLs for the user.
+Google OAuth setup and deployment are one-time admin jobs:
+[docs/GOOGLE_OAUTH_SETUP.md](docs/GOOGLE_OAUTH_SETUP.md).
+
 ## Two front ends, one engine
 
 | | `apps-script/` | `web/` |
@@ -106,7 +121,8 @@ docs/                architecture, setup, Gmail, schema, dashboard, AI, tests,
 | Database | Google Sheets | Postgres (Supabase) |
 | Dashboard | Looker Studio | built-in pages |
 | Cost | free | free tiers; Anthropic billed per call |
-| Gmail ingestion | direct | via the Apps Script bridge |
+| Gmail ingestion | needs a label, `gmail.modify` | **OAuth, read-only, automatic** |
+| Attachments | not parsed | xlsx / csv parsed |
 
 The web app is a **direct port**, and `web/tests/parity.test.ts` proves it by
 running both implementations over the same 14 fixtures and comparing every
