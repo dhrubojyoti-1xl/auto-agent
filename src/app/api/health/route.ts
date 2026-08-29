@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { connectionStyle, query } from '@/lib/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -11,6 +11,11 @@ export async function GET() {
     const rows = await query<{ count: number }>('select count(*)::int as count from tasks');
     checks.database = 'ok';
     checks.tasks = String(rows[0].count);
+    checks.connection = connectionStyle();
+    if (checks.connection === 'direct') {
+      checks.connectionNote =
+        'direct connection (5432): fine for a demo, switch to the pooler (6543) before real load';
+    }
   } catch (e) {
     checks.database = 'error';
     checks.detail = (e as Error).message.slice(0, 120);

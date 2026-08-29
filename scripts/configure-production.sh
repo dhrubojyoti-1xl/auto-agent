@@ -12,15 +12,17 @@
 # Type them at the prompt — they go straight into Vercel and are never printed,
 # logged, or written to the repository:
 #
-#   DATABASE_URL           Supabase -> Settings -> Database -> Connection pooling
-#                          (port 6543). Your project ref is njiwtuvwujooanyznyty.
-#   GOOGLE_CLIENT_ID       Google Cloud -> Credentials -> OAuth client (Web)
-#   GOOGLE_CLIENT_SECRET   same screen
+#   Supabase database password   (the connection string is built for you)
+#   GOOGLE_CLIENT_ID             Google Cloud -> Credentials -> OAuth client (Web)
+#   GOOGLE_CLIENT_SECRET         same screen
 #
 # Safe to re-run: every step is idempotent and existing values are left alone.
 # =============================================================================
 set -uo pipefail
 cd "$(dirname "$0")/.."
+
+# Your Supabase project. Override with SUPABASE_REF=... if you use another.
+SUPABASE_REF="${SUPABASE_REF:-njiwtuvwujooanyznyty}"
 
 say()  { printf "\n\033[1m==> %s\033[0m\n" "$1"; }
 ok()   { printf "    \033[32m%s\033[0m\n" "$1"; }
@@ -82,7 +84,42 @@ need() {
   echo "    (typed here, sent straight to Vercel, never printed or stored locally)"
   npx vercel env add "$KEY" production || warn "$KEY not set — re-run this script later"
 }
-need DATABASE_URL       "Supabase -> Settings -> Database -> Connection pooling -> URI (port 6543)"
+# DATABASE_URL: rather than make you find and assemble a connection string,
+# build it from the project ref and ask only for the password, typed hidden.
+if echo "$EXISTING" | grep -q "\bDATABASE_URL\b"; then
+  ok "DATABASE_URL already set"
+else
+  echo
+  echo "    Supabase database password"
+  echo "    If you do not have it: https://supabase.com/dashboard/project/$SUPABASE_REF/settings/database"
+  echo "    -> Reset database password -> copy it (nothing is connected yet, so this is safe)"
+  echo
+  printf "    Paste the password (hidden): "
+  read -r -s DBPASS; echo
+  if [ -z "$DBPASS" ]; then
+    warn "no password entered — skipping. Re-run this script when you have it."
+  else
+    ENC=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=''))" "$DBPASS")
+    echo
+    echo "    Which connection?"
+    echo "      1) Transaction pooler, port 6543  (recommended)"
+    echo "      2) Direct connection, port 5432   (fine for a demo)"
+    printf "    [1]: "
+    read -r CHOICE
+    if [ "${CHOICE:-1}" = "2" ]; then
+      DBURL="postgresql://postgres:${ENC}@db.${SUPABASE_REF}.supabase.co:5432/postgres"
+    else
+      printf "    Pooler host from the Connect panel [aws-0-ap-northeast-1.pooler.supabase.com]: "
+      read -r PHOST
+      PHOST=${PHOST:-aws-0-ap-northeast-1.pooler.supabase.com}
+      DBURL="postgresql://postgres.${SUPABASE_REF}:${ENC}@${PHOST}:6543/postgres"
+    fi
+    printf "%s" "$DBURL" | npx vercel env add DATABASE_URL production --force >/dev/null 2>&1 \
+      && ok "DATABASE_URL set (value not printed)"
+    unset DBPASS ENC DBURL
+  fi
+fi
+
 need GOOGLE_CLIENT_ID   "Google Cloud -> APIs & Services -> Credentials -> OAuth client (Web application)"
 need GOOGLE_CLIENT_SECRET "same screen as the client ID"
 

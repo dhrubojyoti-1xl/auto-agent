@@ -27,14 +27,55 @@ export function getPool(): Pool {
       '(Project Settings -> Database -> Connection pooling, port 6543).'
     );
   }
+  // Supabase exposes two connection styles and the difference matters here.
+  //
+  //   pooler (Supavisor, port 6543)  one shared server-side pool
+  //   direct (db.<ref>.supabase.co)  a real Postgres connection per client
+  //
+  // Vercel gives every request its own isolate, so a direct connection opens a
+  // fresh pool per isolate and a Nano instance (60 connections) is exhausted
+  // under modest load. It works fine for a demo or a single manager, so rather
+  // than refuse it we clamp the pool to one connection and say so.
+  const isDirect = isDirectConnection(connectionString);
+  const max = Number(process.env.PG_POOL_MAX || (isDirect ? 1 : 3));
+  if (isDirect && !warnedAboutDirect) {
+    warnedAboutDirect = true;
+    console.warn(
+      '[db] DATABASE_URL is a DIRECT Postgres connection (port 5432). Pool size ' +
+      'clamped to 1. This is fine for a demo; switch to the Supabase transaction ' +
+      'pooler (port 6543) before real load, or connections will be exhausted.'
+    );
+  }
   pool = new Pool({
     connectionString,
-    max: Number(process.env.PG_POOL_MAX || 3),
+    max,
+    idleTimeoutMillis: isDirect ? 5_000 : 30_000,
+    connectionTimeoutMillis: 10_000,
     ssl: /supabase|amazonaws|render|neon/i.test(connectionString)
       ? { rejectUnauthorized: false }
       : undefined
   });
   return pool;
+}
+
+let warnedAboutDirect = false;
+
+/** True for Supabase's direct endpoint or any plain 5432 connection. */
+export function isDirectConnection(connectionString: string): boolean {
+  if (/pooler\.supabase\.com/i.test(connectionString)) return false;
+  if (/^db\.[a-z0-9]+\.supabase\.co$/i.test(hostOf(connectionString))) return true;
+  return /:5432\b/.test(connectionString);
+}
+
+export function hostOf(connectionString: string): string {
+  try { return new URL(connectionString).hostname; } catch { return ''; }
+}
+
+/** For /api/health: which style is configured, without revealing credentials. */
+export function connectionStyle(): 'pooler' | 'direct' | 'unknown' {
+  const cs = process.env.DATABASE_URL;
+  if (!cs) return 'unknown';
+  return isDirectConnection(cs) ? 'direct' : 'pooler';
 }
 
 export async function query<T = Record<string, unknown>>(

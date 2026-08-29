@@ -163,3 +163,16 @@ d('pipeline against Postgres', () => {
     expect(rows.map((r: { task_date: string }) => String(r.task_date))).toEqual([expected]);
   });
 });
+
+describe('connection style detection', () => {
+  it('tells a Supabase pooler URL from a direct one', async () => {
+    const { isDirectConnection } = await import('../src/lib/db');
+    expect(isDirectConnection(
+      'postgresql://postgres.abc:pw@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres'
+    )).toBe(false);
+    expect(isDirectConnection(
+      'postgresql://postgres:pw@db.njiwtuvwujooanyznyty.supabase.co:5432/postgres'
+    )).toBe(true);
+    expect(isDirectConnection('postgres://localhost/dev')).toBe(false);
+  });
+});
