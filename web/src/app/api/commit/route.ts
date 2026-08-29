@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { isAuthenticated } from '@/lib/auth';
+import { getSession } from '@/lib/auth';
 import { commitDocument } from '@/lib/pipeline';
 import { shortHash } from '@/lib/core/normalize';
 
@@ -7,9 +7,8 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
-  if (!await isAuthenticated()) {
-    return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
-  }
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
 
@@ -27,7 +26,7 @@ export async function POST(req: Request) {
       receivedAt: new Date().toISOString(),
       html: isHtml ? content : undefined,
       text: isHtml ? undefined : content
-    }, 'paste');
+    }, 'paste', session.userId);
     return NextResponse.json(result);
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });

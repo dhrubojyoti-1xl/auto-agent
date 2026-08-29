@@ -1,4 +1,7 @@
+import { redirect } from 'next/navigation';
 import Nav from './nav';
+import { getSession } from '@/lib/auth';
+import { listGmailAccounts } from '@/lib/accounts';
 import { getDailyTrend, getDepartments, getDocuments, getEmployees, getKpis } from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
@@ -35,10 +38,15 @@ function Sparkline({ points }: { points: { date: string; total: number }[] }) {
 }
 
 export default async function OverviewPage() {
-  let kpis, departments, trend, employees, documents;
+  const session = await getSession();
+  if (!session) redirect('/login');
+  const uid = session.userId;
+
+  let kpis, departments, trend, employees, documents, inboxes;
   try {
-    [kpis, departments, trend, employees, documents] = await Promise.all([
-      getKpis(), getDepartments(), getDailyTrend(), getEmployees(), getDocuments(8)
+    [kpis, departments, trend, employees, documents, inboxes] = await Promise.all([
+      getKpis(uid), getDepartments(uid), getDailyTrend(uid), getEmployees(uid),
+      getDocuments(uid, 8), listGmailAccounts(uid)
     ]);
   } catch (e) {
     return (
@@ -65,16 +73,28 @@ export default async function OverviewPage() {
           <h1>Overview</h1>
           <p className="sub">No reports imported yet.</p>
           <div className="card">
-            <h3>Get started</h3>
+            <h3>{inboxes.length ? 'Waiting for reports' : 'Connect your inbox'}</h3>
             <p className="small muted">
-              Paste a daily report on the <a href="/submit">Submit report</a> page. You will see
-              exactly what would be imported before anything is written.
+              {inboxes.length
+                ? `${inboxes[0].email} is connected. The assistant checks it on a schedule; ` +
+                  'nothing matching a report has arrived in the sync window yet.'
+                : 'Connect a Gmail inbox and the assistant will collect department reports ' +
+                  'from it automatically — no labels, no forwarding, no uploads.'}
+            </p>
+            <p className="small" style={{ marginTop: '.7rem' }}>
+              <a className="btn" href="/connect">
+                {inboxes.length ? 'Check inbox status' : 'Connect Gmail'}
+              </a>
             </p>
           </div>
         </main>
       </>
     );
   }
+
+  const lastSync = inboxes
+    .map(a => a.lastSyncAt).filter(Boolean).sort().slice(-1)[0];
+  const reportsProcessed = documents.filter(d => d.status !== 'NO_DATA').length;
 
   return (
     <>
@@ -97,6 +117,11 @@ export default async function OverviewPage() {
           <Kpi label="Repeated tasks" value={kpis.repeatedTasks} />
           <Kpi label="Departments" value={kpis.departmentsReporting}
                note={`${kpis.employeesReporting} employees`} />
+          <Kpi label="Reports processed" value={reportsProcessed}
+               note={inboxes.length ? inboxes[0].email : 'no inbox connected'} />
+          <Kpi label="Last sync"
+               value={lastSync ? String(lastSync).slice(11, 16) : '—'}
+               note={lastSync ? String(lastSync).slice(0, 10) : 'never'} />
         </div>
 
         <h2>Daily task volume</h2>

@@ -8,7 +8,7 @@ export interface Kpis {
   insufficientDuration: number; firstDate: string | null; lastDate: string | null;
 }
 
-export async function getKpis(): Promise<Kpis> {
+export async function getKpis(ownerUserId: number): Promise<Kpis> {
   const [r] = await query<Record<string, string | number | null>>(`
     select
       count(*)::int as total,
@@ -24,7 +24,7 @@ export async function getKpis(): Promise<Kpis> {
       count(distinct employee_name)::int as employees_reporting,
       count(*) filter (where slow_task_flag = 'INSUFFICIENT_DATA')::int as insufficient_duration,
       min(task_date) as first_date, max(task_date) as last_date
-    from tasks`);
+    from tasks where owner_user_id = $1`, [ownerUserId]);
   return {
     total: Number(r.total), completed: Number(r.completed), pending: Number(r.pending),
     inProgress: Number(r.in_progress), blocked: Number(r.blocked),
@@ -44,11 +44,12 @@ export interface DeptRow {
   repeatedTasks: number; employees: number;
 }
 
-export async function getDepartments(): Promise<DeptRow[]> {
+export async function getDepartments(ownerUserId: number): Promise<DeptRow[]> {
   const rows = await query<Record<string, string | number>>(
     `select department, total_tasks, completed, pending, blocked, completion_rate,
             slow_tasks, repeated_tasks, employees_reporting
-     from department_summary order by total_tasks desc`);
+     from department_summary where owner_user_id = $1 order by total_tasks desc`,
+    [ownerUserId]);
   return rows.map(r => ({
     department: String(r.department), total: Number(r.total_tasks),
     completed: Number(r.completed), pending: Number(r.pending),
@@ -58,22 +59,23 @@ export async function getDepartments(): Promise<DeptRow[]> {
   }));
 }
 
-export async function getDailyTrend(days = 14) {
+export async function getDailyTrend(ownerUserId: number, days = 14) {
   const rows = await query<Record<string, string | number>>(
     `select period_start, total_tasks, completed, completion_rate
-     from daily_summary where department = 'ALL'
-     order by period_start desc limit $1`, [days]);
+     from daily_summary where department = 'ALL' and owner_user_id = $2
+     order by period_start desc limit $1`, [days, ownerUserId]);
   return rows.map(r => ({
     date: String(r.period_start), total: Number(r.total_tasks),
     completed: Number(r.completed), completionRate: Number(r.completion_rate)
   })).reverse();
 }
 
-export async function getEmployees() {
+export async function getEmployees(ownerUserId: number) {
   const rows = await query<Record<string, string | number>>(
     `select employee, department, total_tasks, completed, pending, completion_rate,
             slow_tasks, repeated_tasks, distinct_days_reported, data_sufficiency
-     from employee_summary order by total_tasks desc`);
+     from employee_summary where owner_user_id = $1 order by total_tasks desc`,
+    [ownerUserId]);
   return rows.map(r => ({
     employee: String(r.employee), department: String(r.department ?? ''),
     total: Number(r.total_tasks), completed: Number(r.completed),
@@ -83,12 +85,13 @@ export async function getEmployees() {
   }));
 }
 
-export async function getRepeatGroups() {
+export async function getRepeatGroups(ownerUserId: number) {
   const rows = await query<Record<string, string | number | string[]>>(
     `select employee, department, task, occurrence_count, distinct_dates,
             max_same_day_count, first_date, last_date, classification,
             classification_reason
-     from repeat_groups order by occurrence_count desc`);
+     from repeat_groups where owner_user_id = $1 order by occurrence_count desc`,
+    [ownerUserId]);
   return rows.map(r => ({
     employee: String(r.employee), department: String(r.department ?? ''),
     task: String(r.task), occurrences: Number(r.occurrence_count),
@@ -98,11 +101,11 @@ export async function getRepeatGroups() {
   }));
 }
 
-export async function getSlowTasks() {
+export async function getSlowTasks(ownerUserId: number) {
   const rows = await query<Record<string, string | number>>(
     `select task_date, department, employee, task, task_category, task_status,
             expected_duration, actual_duration, variance_hours, variance_pct, duration_basis
-     from slow_tasks`);
+     from slow_tasks where owner_user_id = $1`, [ownerUserId]);
   return rows.map(r => ({
     date: String(r.task_date), department: String(r.department ?? ''),
     employee: String(r.employee), task: String(r.task),
@@ -113,11 +116,12 @@ export async function getSlowTasks() {
   }));
 }
 
-export async function getRejections() {
+export async function getRejections(ownerUserId: number) {
   const rows = await query<Record<string, string | number | Record<string, string>>>(
     `select rejection_id, document_id, rejection_reason, rejection_detail, raw_row,
             claimed_date, logged_at, resolution_status
-     from data_quality order by logged_at desc limit 300`);
+     from data_quality where owner_user_id = $1 order by logged_at desc limit 300`,
+    [ownerUserId]);
   return rows.map(r => ({
     id: Number(r.rejection_id), documentId: String(r.document_id ?? ''),
     reason: String(r.rejection_reason), detail: String(r.rejection_detail ?? ''),
@@ -127,12 +131,13 @@ export async function getRejections() {
   }));
 }
 
-export async function getDocuments(limit = 25) {
+export async function getDocuments(ownerUserId: number, limit = 25) {
   const rows = await query<Record<string, string | number>>(
     `select report_id, document_id, source, subject, sender, department, report_date,
             processing_status, rows_extracted, rows_inserted, rows_skipped_idempotent,
             rows_rejected, processed_at
-     from documents order by processed_at desc limit $1`, [limit]);
+     from documents where owner_user_id = $2
+     order by processed_at desc limit $1`, [limit, ownerUserId]);
   return rows.map(r => ({
     reportId: String(r.report_id), documentId: String(r.document_id),
     source: String(r.source), subject: String(r.subject ?? ''),
@@ -144,10 +149,11 @@ export async function getDocuments(limit = 25) {
   }));
 }
 
-export async function getLatestReport() {
+export async function getLatestReport(ownerUserId: number) {
   const rows = await query<Record<string, string>>(
     `select report_id, report_type, period_start, period_end, generated_at,
             generator, status, human_report, validation_error
-     from ai_reports order by generated_at desc limit 1`);
+     from ai_reports where owner_user_id = $1
+     order by generated_at desc limit 1`, [ownerUserId]);
   return rows[0] || null;
 }

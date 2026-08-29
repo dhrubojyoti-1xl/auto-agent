@@ -1,10 +1,14 @@
+import { redirect } from 'next/navigation';
 import Nav from '../nav';
+import { getSession } from '@/lib/auth';
 import { getDocuments, getRejections } from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
 
 export default async function QualityPage() {
-  const [rejections, documents] = await Promise.all([getRejections(), getDocuments(30)]);
+  const session = await getSession();
+  if (!session) redirect('/login');
+  const [rejections, documents] = await Promise.all([getRejections(session.userId), getDocuments(session.userId, 30)]);
   const byReason = rejections.reduce<Record<string, number>>((acc, r) => {
     acc[r.reason] = (acc[r.reason] || 0) + 1; return acc;
   }, {});

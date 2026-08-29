@@ -102,17 +102,24 @@ docs/                architecture, setup, Gmail, schema, dashboard, AI, tests,
 ## The product flow (hosted app)
 
 ```
-Manager signs in → Connect Gmail (once) → read-only Google consent
-        ↓  everything below is automatic, hourly
+Manager opens the app → Continue with Google → read-only Gmail consent → done
+        ↓  everything below is automatic, on a schedule
   reads their inbox → detects reports by CONTENT, not labels
-  → parses email bodies and xlsx/csv attachments
-  → normalises, validates, deduplicates → Postgres
-  → dashboard updates → AI management summary
+  → parses email bodies and xlsx / xlsm / csv / tsv attachments
+  → normalises, validates, identifies department + employee, deduplicates
+  → Postgres → dashboard → repeated/slow analysis → AI management summary
 ```
 
-No labels, no forwarding, no uploads, no scripts, no database URLs for the user.
-Google OAuth setup and deployment are one-time admin jobs:
-[docs/GOOGLE_OAUTH_SETUP.md](docs/GOOGLE_OAUTH_SETUP.md).
+After that one consent there is **no daily manual work**: no labels, no
+forwarding, no uploads, no copy-paste, no scripts, no "process" button, no
+database URLs. Departments keep emailing reports exactly as they do today.
+
+Each signed-in Google account is its own workspace — one manager cannot see
+another's mailbox data ([docs/SECURITY.md](docs/SECURITY.md)).
+
+Google OAuth setup and deployment are one-time administrator jobs:
+[docs/GOOGLE_OAUTH_SETUP.md](docs/GOOGLE_OAUTH_SETUP.md),
+[docs/VERCEL_DEPLOYMENT.md](docs/VERCEL_DEPLOYMENT.md).
 
 ## Two front ends, one engine
 
@@ -128,14 +135,14 @@ The web app is a **direct port**, and `web/tests/parity.test.ts` proves it by
 running both implementations over the same 14 fixtures and comparing every
 field of every record — including the duplicate fingerprint. Start with the
 Sheets version if cost matters most; add the web app for a nicer experience.
-See [docs/WEB_APP.md](docs/WEB_APP.md) and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+See [docs/WEB_APP.md](docs/WEB_APP.md) and [docs/VERCEL_DEPLOYMENT.md](docs/VERCEL_DEPLOYMENT.md).
 
 ---
 
 ## Quick start
 
 ```bash
-npm test          # 86 checks (50 unit + 36 end-to-end), no Google account needed
+npm test          # 86 Apps Script checks, no Google account needed
 npm run export    # regenerate sample-data/ and test-emails/ from the code
 ```
 

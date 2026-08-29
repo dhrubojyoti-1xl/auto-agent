@@ -1,4 +1,7 @@
+import { redirect } from 'next/navigation';
 import Nav from '../nav';
+import { getSession } from '@/lib/auth';
+import { getUser } from '@/lib/users';
 import { listGmailAccounts, listSyncRuns } from '@/lib/accounts';
 import { googleConfigured } from '@/lib/google-oauth';
 import ConnectControls from './controls';
@@ -17,14 +20,19 @@ const ERRORS: Record<string, string> = {
 export default async function ConnectPage({
   searchParams
 }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const session = await getSession();
+  if (!session) redirect('/login');
   const params = await searchParams;
   const configured = googleConfigured();
+  const me = await getUser(session.userId).catch(() => null);
 
   let accounts: Awaited<ReturnType<typeof listGmailAccounts>> = [];
   let runs: Awaited<ReturnType<typeof listSyncRuns>> = [];
   let dbError = '';
   try {
-    [accounts, runs] = await Promise.all([listGmailAccounts(), listSyncRuns(10)]);
+    [accounts, runs] = await Promise.all([
+      listGmailAccounts(session.userId), listSyncRuns(session.userId, 10)
+    ]);
   } catch (e) {
     dbError = (e as Error).message;
   }
@@ -37,6 +45,12 @@ export default async function ConnectPage({
       <Nav />
       <main className="shell">
         <h1>Connect your inbox</h1>
+        {me && (
+          <p className="small muted" style={{ marginTop: '-.4rem' }}>
+            Signed in as <strong>{me.email}</strong>
+            {me.kind === 'local' && ' (password sign-in)'}
+          </p>
+        )}
         <p className="sub">
           Sign in with Google once. After that the assistant reads report emails from your
           inbox on its own — you never label, forward or upload anything.

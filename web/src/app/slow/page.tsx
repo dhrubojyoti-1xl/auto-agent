@@ -1,10 +1,14 @@
+import { redirect } from 'next/navigation';
 import Nav from '../nav';
+import { getSession } from '@/lib/auth';
 import { getKpis, getSlowTasks } from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
 
 export default async function SlowPage() {
-  const [rows, kpis] = await Promise.all([getSlowTasks(), getKpis()]);
+  const session = await getSession();
+  if (!session) redirect('/login');
+  const [rows, kpis] = await Promise.all([getSlowTasks(session.userId), getKpis(session.userId)]);
   return (
     <>
       <Nav />

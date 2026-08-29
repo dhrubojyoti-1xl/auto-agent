@@ -7,8 +7,9 @@
  *   TEST_DATABASE_URL=postgres://localhost/autoagent_test npm test
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { readFileSync } from 'fs';
 import { join } from 'path';
+import { readFileSync } from 'fs';
+import { resetDatabase } from './helpers';
 
 const DB = process.env.TEST_DATABASE_URL;
 const d = DB ? describe : describe.skip;
@@ -25,10 +26,7 @@ d('pipeline against Postgres', () => {
     db = await import('../src/lib/db');
     pipeline = await import('../src/lib/pipeline');
     seedDb = await import('../src/lib/seed-db');
-    const schema = readFileSync(join(__dirname, '..', 'supabase', 'schema.sql'), 'utf8');
-    await db.query('drop schema public cascade; create schema public;');
-    await db.query(schema);
-    await seedDb.seedDatabase({ includeDemoEmployees: true });
+    await resetDatabase(db, seedDb);
   });
 
   afterAll(async () => { await db.getPool().end(); });
@@ -49,7 +47,7 @@ d('pipeline against Postgres', () => {
   });
 
   it('preview writes nothing', async () => {
-    const preview = await pipeline.previewDocument(doc());
+    const preview = await pipeline.previewDocument(doc(), 1);
     expect(preview.accepted.length).toBe(14);
     expect(preview.rejected.length).toBe(2);
     const [{ count }] = await db.query('select count(*)::int as count from tasks');
@@ -57,7 +55,7 @@ d('pipeline against Postgres', () => {
   });
 
   it('commit writes 14 tasks and 2 rejections', async () => {
-    const res = await pipeline.commitDocument(doc(), 'paste');
+    const res = await pipeline.commitDocument(doc(), 'paste', 1);
     expect(res.rowsWritten).toBe(14);
     expect(res.rejected.length).toBe(2);
     const [{ count: tasks }] = await db.query('select count(*)::int as count from tasks');
@@ -67,7 +65,7 @@ d('pipeline against Postgres', () => {
   });
 
   it('IDEMPOTENT: committing the same document again writes nothing', async () => {
-    const res = await pipeline.commitDocument(doc(), 'paste');
+    const res = await pipeline.commitDocument(doc(), 'paste', 1);
     expect(res.rowsWritten).toBe(0);
     expect(res.skippedIdempotent).toBe(14);
     const [{ count }] = await db.query('select count(*)::int as count from tasks');
@@ -76,7 +74,7 @@ d('pipeline against Postgres', () => {
 
   it('a forwarded copy from a different document is rejected as duplicate', async () => {
     const res = await pipeline.commitDocument(
-      { ...doc(), documentId: 'DEMO-FWD', subject: 'Fwd: Daily Report - Sales' }, 'email');
+      { ...doc(), documentId: 'DEMO-FWD', subject: 'Fwd: Daily Report - Sales' }, 'email', 1);
     expect(res.rowsWritten).toBe(0);
     const dupes = res.rejected.filter((r: { reason: string }) => r.reason === 'DUPLICATE_ACROSS_DOCUMENTS');
     expect(dupes.length).toBe(14);
@@ -98,8 +96,8 @@ d('pipeline against Postgres', () => {
     // Re-submitting an identical report must not pile up duplicate rejection
     // records, or the Data Quality page over-reports how much bad data arrived.
     const before = await db.query('select count(*)::int as count from data_quality');
-    await pipeline.commitDocument(doc(), 'paste');
-    await pipeline.commitDocument(doc(), 'paste');
+    await pipeline.commitDocument(doc(), 'paste', 1);
+    await pipeline.commitDocument(doc(), 'paste', 1);
     const after = await db.query('select count(*)::int as count from data_quality');
     expect(after[0].count).toBe(before[0].count);
   });
@@ -108,13 +106,13 @@ d('pipeline against Postgres', () => {
     const rows = await db.query('select task_fingerprint from tasks limit 1');
     await expect(db.query(
       `insert into tasks (task_id, task_date, employee_name, task, task_normalized,
-         task_status, source_document_id, task_fingerprint)
-       values ('X','2026-01-01','X','X','x','Pending','X',$1)`, [rows[0].task_fingerprint]
+         task_status, source_document_id, task_fingerprint, owner_user_id)
+       values ('X','2026-01-01','X','X','x','Pending','X',$1,1)`, [rows[0].task_fingerprint]
     )).rejects.toThrow(/uq_task_fingerprint|duplicate key/);
   });
 
   it('analysis flags are written back to the rows', async () => {
-    const out = await pipeline.rebuildAnalysis();
+    const out = await pipeline.rebuildAnalysis(1);
     expect(out.slowTasks).toBe(4);
     const groups = await db.query(
       `select employee, task, occurrence_count, classification from repeat_groups

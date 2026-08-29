@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { isAuthenticated } from '@/lib/auth';
+import { issueToken, SESSION_COOKIE, sessionCookieOptions } from '@/lib/auth';
 import { decodeIdToken, exchangeCode, GOOGLE_SCOPES } from '@/lib/google-oauth';
 import { upsertGmailAccount } from '@/lib/accounts';
 import { logEvent } from '@/lib/db';
+import { upsertGoogleUser } from '@/lib/users';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -11,9 +12,7 @@ export const maxDuration = 60;
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
-  const back = (msg: string) => NextResponse.redirect(new URL(`/connect?error=${msg}`, req.url));
-
-  if (!await isAuthenticated()) return NextResponse.redirect(new URL('/login', req.url));
+  const back = (msg: string) => NextResponse.redirect(new URL(`/login?error=${msg}`, req.url));
 
   const error = url.searchParams.get('error');
   if (error) return back(encodeURIComponent(error));
@@ -39,7 +38,17 @@ export async function GET(req: Request) {
     if (!tokens.id_token) return back('no_id_token');
 
     const profile = decodeIdToken(tokens.id_token);
+
+    // One consent yields both: the signed-in identity, and the mailbox that
+    // identity will have read on its behalf.
+    const user = await upsertGoogleUser({
+      googleSub: profile.sub,
+      email: profile.email,
+      displayName: profile.name || profile.email,
+      pictureUrl: profile.picture || ''
+    });
     const account = await upsertGmailAccount({
+      ownerUserId: user.id,
       email: profile.email,
       googleSub: profile.sub,
       displayName: profile.name || profile.email,
@@ -48,8 +57,10 @@ export async function GET(req: Request) {
       scopes: granted.length ? granted : GOOGLE_SCOPES
     });
 
-    await logEvent('INFO', 'Auth', 'connect', 'OK', `Connected ${account.email}`);
+    await logEvent('INFO', 'Auth', 'connect', 'OK',
+      `Signed in and connected ${account.email}`, undefined, undefined, undefined);
     const res = NextResponse.redirect(new URL('/connect?connected=1&sync=1', req.url));
+    res.cookies.set(SESSION_COOKIE, issueToken(user.id, 'google'), sessionCookieOptions());
     res.cookies.set('g_state', '', { path: '/', maxAge: 0 });
     return res;
   } catch (e) {

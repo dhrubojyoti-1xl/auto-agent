@@ -1,11 +1,15 @@
+import { redirect } from 'next/navigation';
 import Nav from '../nav';
+import { getSession } from '@/lib/auth';
 import { getLatestReport } from '@/lib/queries';
 import ReportControls from './controls';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ReportPage() {
-  const latest = await getLatestReport();
+  const session = await getSession();
+  if (!session) redirect('/login');
+  const latest = await getLatestReport(session.userId);
   const aiConfigured = !!process.env.ANTHROPIC_API_KEY;
 
   return (

@@ -1,4 +1,6 @@
+import { redirect } from 'next/navigation';
 import Nav from '../nav';
+import { getSession } from '@/lib/auth';
 import { getRepeatGroups } from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
@@ -11,7 +13,9 @@ const PILL: Record<string, string> = {
 };
 
 export default async function RepeatsPage() {
-  const groups = await getRepeatGroups();
+  const session = await getSession();
+  if (!session) redirect('/login');
+  const groups = await getRepeatGroups(session.userId);
   return (
     <>
       <Nav />

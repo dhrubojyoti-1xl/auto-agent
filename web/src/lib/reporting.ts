@@ -46,10 +46,10 @@ export function periodFor(type: ReportType, anchor: string, weekStart: 'MONDAY' 
 }
 
 export async function generateReport(
-  type: ReportType, anchorDate?: string, useAi = true
+  type: ReportType, ownerUserId: number, anchorDate?: string, useAi = true
 ): Promise<GeneratedReport> {
   const cfg = engineConfig();
-  const tasks = await loadTasks();
+  const tasks = await loadTasks(ownerUserId);
   const anchor = anchorDate ||
     (tasks.length ? tasks.map(t => t.date).sort().slice(-1)[0] : new Date().toISOString().slice(0, 10));
   const { start, end } = periodFor(type, anchor, cfg.weekStart);
@@ -59,7 +59,8 @@ export async function generateReport(
   const employees = buildEmployeeSummary(tasks, analysis, cfg);
 
   const rejections = await query<{ rejection_reason: string; claimed_date: string | null; logged_at: string }>(
-    'select rejection_reason, claimed_date, logged_at from data_quality'
+    `select rejection_reason, claimed_date, logged_at from data_quality
+     where owner_user_id = $1`, [ownerUserId]
   );
 
   const dataset = buildAiDataset(
@@ -114,13 +115,14 @@ export async function generateReport(
   }
 
   const humanReport = renderReport(dataset, commentary, status, validationError, cfg);
-  const reportId = `${type}-${start}`;
+  const reportId = `${type}-${start}-u${ownerUserId}`;
   const summary = commentary?.summary || humanReport.split('\n\n')[2] || '';
 
   await query(
     `insert into ai_reports (report_id, report_type, period_start, period_end,
-       generator, model, status, summary, human_report, dataset_json, ai_json, validation_error)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       generator, model, status, summary, human_report, dataset_json, ai_json,
+       validation_error, owner_user_id)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
      on conflict (report_id) do update set
        generated_at = now(), generator = excluded.generator, model = excluded.model,
        status = excluded.status, summary = excluded.summary,
@@ -128,7 +130,7 @@ export async function generateReport(
        ai_json = excluded.ai_json, validation_error = excluded.validation_error`,
     [reportId, type, start, end, generator, model || null, status, summary.slice(0, 4000),
      humanReport, JSON.stringify(dataset), commentary ? JSON.stringify(commentary) : null,
-     validationError || null]
+     validationError || null, ownerUserId]
   );
 
   return {

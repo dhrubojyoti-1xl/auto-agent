@@ -9,7 +9,12 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const PUBLIC_PATHS = ['/login', '/api/login', '/api/ingest', '/api/health'];
+// /api/auth/google is public because it IS the login: "Continue with Google"
+// must work for someone who has no session yet. Its callback validates the
+// state cookie and Google's response before issuing one.
+const PUBLIC_PATHS = [
+  '/login', '/api/login', '/api/auth/google', '/api/ingest', '/api/health'
+];
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -17,7 +22,7 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
   const cookie = req.cookies.get('aa_session')?.value;
-  const looksValid = !!cookie && cookie.split('.').length === 3;
+  const looksValid = !!cookie && cookie.split('.').length === 5;
   if (looksValid) return NextResponse.next();
 
   if (pathname.startsWith('/api/')) {

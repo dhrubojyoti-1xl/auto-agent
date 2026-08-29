@@ -205,122 +205,10 @@ create table if not exists system_log (
 create index if not exists idx_log_ts on system_log (ts desc);
 
 -- ---------------------------------------------------------------- views -----
--- NOTE ON TYPES: count(*) is bigint, which node-postgres returns as a STRING
--- to avoid silent precision loss. Every count below is cast to int so the
--- application gets numbers and dashboard arithmetic cannot become string
--- concatenation. numeric columns (rates, durations) are still strings by the
--- same rule and are converted explicitly in src/lib/db.ts.
--- Rates are always computed from summed counts. Averaging stored rates across
--- groups of different sizes is the classic way this kind of dashboard lies.
-
--- A grouping set gives us the per-department rows AND a department='ALL'
--- roll-up in one pass. GROUPING() is what distinguishes "this is the roll-up
--- row" from "this task genuinely has no department" — without it the roll-up
--- silently masquerades as a real department and every total double-counts.
-create or replace view daily_summary as
-select
-  t.task_date                                   as period_start,
-  case when grouping(t.department) = 1 then 'ALL'
-       else coalesce(t.department, 'Unassigned') end as department,
-  count(*)::int                                 as total_tasks,
-  count(*) filter (where t.task_status = 'Completed')::int   as completed,
-  count(*) filter (where t.task_status = 'In Progress')::int as in_progress,
-  count(*) filter (where t.task_status = 'Pending')::int     as pending,
-  count(*) filter (where t.task_status = 'Blocked')::int     as blocked,
-  count(*) filter (where t.task_status = 'Cancelled')::int   as cancelled,
-  count(*) filter (where t.task_status = 'Not Started')::int as not_started,
-  round(100.0 * count(*) filter (where t.task_status = 'Completed')
-        / nullif(count(*), 0), 1)               as completion_rate,
-  count(*) filter (where t.slow_task_flag = 'TRUE')::int     as slow_tasks,
-  count(*) filter (where t.repeated_task_flag)::int          as repeated_tasks,
-  count(distinct t.employee_name)::int          as employees_reporting
-from tasks t
-group by grouping sets ((t.task_date, t.department), (t.task_date));
-
-create or replace view weekly_summary as
-select
-  date_trunc('week', t.task_date)::date         as period_start,
-  (date_trunc('week', t.task_date)::date + 6)   as period_end,
-  case when grouping(t.department) = 1 then 'ALL'
-       else coalesce(t.department, 'Unassigned') end as department,
-  count(*)::int                                 as total_tasks,
-  count(*) filter (where t.task_status = 'Completed')::int   as completed,
-  count(*) filter (where t.task_status = 'Pending')::int     as pending,
-  round(100.0 * count(*) filter (where t.task_status = 'Completed')
-        / nullif(count(*), 0), 1)               as completion_rate,
-  count(*) filter (where t.slow_task_flag = 'TRUE')::int     as slow_tasks,
-  count(*) filter (where t.repeated_task_flag)::int          as repeated_tasks,
-  count(distinct t.employee_name)::int          as employees_reporting
-from tasks t
-group by grouping sets ((date_trunc('week', t.task_date), t.department),
-                        (date_trunc('week', t.task_date)));
-
-create or replace view monthly_summary as
-select
-  date_trunc('month', t.task_date)::date        as period_start,
-  to_char(t.task_date, 'YYYY-MM')                as month_label,
-  case when grouping(t.department) = 1 then 'ALL'
-       else coalesce(t.department, 'Unassigned') end as department,
-  count(*)::int                                 as total_tasks,
-  count(*) filter (where t.task_status = 'Completed')::int   as completed,
-  count(*) filter (where t.task_status = 'Pending')::int     as pending,
-  round(100.0 * count(*) filter (where t.task_status = 'Completed')
-        / nullif(count(*), 0), 1)               as completion_rate,
-  count(*) filter (where t.slow_task_flag = 'TRUE')::int     as slow_tasks,
-  count(*) filter (where t.repeated_task_flag)::int          as repeated_tasks,
-  count(distinct t.employee_name)::int          as employees_reporting
-from tasks t
-group by grouping sets ((date_trunc('month', t.task_date), to_char(t.task_date, 'YYYY-MM'), t.department),
-                        (date_trunc('month', t.task_date), to_char(t.task_date, 'YYYY-MM')));
-
-create or replace view department_summary as
-select
-  coalesce(t.department, 'Unassigned')          as department,
-  count(*)::int                                 as total_tasks,
-  count(*) filter (where t.task_status = 'Completed')::int   as completed,
-  count(*) filter (where t.task_status = 'In Progress')::int as in_progress,
-  count(*) filter (where t.task_status = 'Pending')::int     as pending,
-  count(*) filter (where t.task_status = 'Blocked')::int     as blocked,
-  round(100.0 * count(*) filter (where t.task_status = 'Completed')
-        / nullif(count(*), 0), 1)               as completion_rate,
-  count(*) filter (where t.slow_task_flag = 'TRUE')::int     as slow_tasks,
-  count(*) filter (where t.repeated_task_flag)::int          as repeated_tasks,
-  count(distinct t.employee_name)::int          as employees_reporting,
-  min(t.task_date)                              as first_date,
-  max(t.task_date)                              as last_date
-from tasks t
-group by coalesce(t.department, 'Unassigned');
-
-create or replace view employee_summary as
-select
-  t.employee_name                               as employee,
-  max(t.department)                             as department,
-  count(*)::int                                 as total_tasks,
-  count(*) filter (where t.task_status = 'Completed')::int   as completed,
-  count(*) filter (where t.task_status = 'Pending')::int     as pending,
-  round(100.0 * count(*) filter (where t.task_status = 'Completed')
-        / nullif(count(*), 0), 1)               as completion_rate,
-  count(*) filter (where t.slow_task_flag = 'TRUE')::int     as slow_tasks,
-  count(*) filter (where t.repeated_task_flag)::int          as repeated_tasks,
-  count(distinct t.task_date)::int              as distinct_days_reported,
-  -- Honest label: task counts measure reported ACTIVITY, not value.
-  case
-    when count(*) >= 30 and count(distinct t.task_date) >= 10 then 'Sufficient for trend'
-    when count(*) >= 10 then 'Indicative only'
-    else 'Insufficient — do not rank'
-  end                                           as data_sufficiency
-from tasks t
-group by t.employee_name;
-
-create or replace view slow_tasks as
-select task_id, task_date, department, employee_name as employee, task,
-       task_category, task_status, expected_duration, actual_duration,
-       slow_variance_hours as variance_hours,
-       round(100.0 * slow_variance_hours / nullif(expected_duration, 0), 1) as variance_pct,
-       duration_basis, link
-from tasks
-where slow_task_flag = 'TRUE'
-order by slow_variance_hours desc;
+-- The reporting views live in supabase/migrations/002_owner_scoped_views.sql,
+-- because they must carry owner_user_id and CREATE OR REPLACE cannot add a
+-- leading column. Keeping one definition avoids the base schema and the
+-- migration fighting each other on every re-run.
 
 -- ------------------------------------------------------------------ RLS -----
 -- Every table is locked by default. The application connects with the service
@@ -394,3 +282,10 @@ begin
   execute 'alter table gmail_accounts enable row level security';
   execute 'alter table sync_runs enable row level security';
 end $$;
+
+
+-- =============================================================================
+-- Migrations are applied after the base schema by scripts/seed.ts, in order.
+-- See supabase/migrations/. Everything is idempotent, so applying the base
+-- schema and every migration on each deploy is the intended operation.
+-- =============================================================================

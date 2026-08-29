@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { isAuthenticated } from '@/lib/auth';
+import { getSession } from '@/lib/auth';
 import { previewDocument } from '@/lib/pipeline';
 import { shortHash } from '@/lib/core/normalize';
 
@@ -8,9 +8,8 @@ export const dynamic = 'force-dynamic';
 
 /** Parses and validates WITHOUT writing anything. Powers the review screen. */
 export async function POST(req: Request) {
-  if (!await isAuthenticated()) {
-    return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
-  }
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
 
@@ -29,6 +28,6 @@ export async function POST(req: Request) {
     receivedAt: new Date().toISOString(),
     html: isHtml ? content : undefined,
     text: isHtml ? undefined : content
-  });
+  }, session.userId);
   return NextResponse.json(result);
 }

@@ -17,7 +17,7 @@ TEST_DATABASE_URL=postgres://localhost/autoagent_test npm test   # + 13 database
 ```
 
 - Architecture, security model and design decisions: [../docs/WEB_APP.md](../docs/WEB_APP.md)
-- Deploying to Supabase + Vercel: [../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md)
+- Deploying to Supabase + Vercel: [../docs/VERCEL_DEPLOYMENT.md](../docs/VERCEL_DEPLOYMENT.md)
 
 No secrets live in this directory. `.env.local` is gitignored; production values
 belong in the Vercel dashboard.

@@ -23,8 +23,12 @@ export function engineConfig(): EngineConfig {
 }
 
 /** Parse and validate WITHOUT writing anything. Used by the preview screen. */
-export async function previewDocument(doc: SourceDocument): Promise<IngestResult> {
-  const [masters, fingerprints] = await Promise.all([loadMasters(), loadFingerprints()]);
+export async function previewDocument(
+  doc: SourceDocument, ownerUserId: number
+): Promise<IngestResult> {
+  const [masters, fingerprints] = await Promise.all([
+    loadMasters(), loadFingerprints(ownerUserId)
+  ]);
   return ingestDocument(doc, masters, engineConfig(), fingerprints);
 }
 
@@ -40,10 +44,12 @@ export interface CommitResult extends IngestResult {
  * system working, not an error.
  */
 export async function commitDocument(
-  doc: SourceDocument, source: string
+  doc: SourceDocument, source: string, ownerUserId: number
 ): Promise<CommitResult> {
   const cfg = engineConfig();
-  const [masters, fingerprints] = await Promise.all([loadMasters(), loadFingerprints()]);
+  const [masters, fingerprints] = await Promise.all([
+    loadMasters(), loadFingerprints(ownerUserId)
+  ]);
   const result = ingestDocument(doc, masters, cfg, fingerprints);
 
   if (result.newEmployees.length) await upsertEmployees(result.newEmployees);
@@ -55,6 +61,7 @@ export async function commitDocument(
   // its counters are corrected after the insert so they reflect what actually
   // landed rather than what we hoped would land.
   await upsertDocument({
+    ownerUserId,
     reportId: result.reportId, documentId: doc.documentId, source,
     subject: doc.subject, sender: doc.sender, senderDomain,
     department: result.department, reportDate: result.reportDate,
@@ -65,16 +72,17 @@ export async function commitDocument(
     error: result.rejected.length ? `${result.rejected.length} row(s) rejected` : ''
   });
 
-  const rowsWritten = await insertTasks(result.accepted);
+  const rowsWritten = await insertTasks(result.accepted, ownerUserId);
 
   if (result.rejected.length) {
     const claimedDates = result.rejected.map(
       r => parseDate(r.raw.date, cfg.dateOrder)
     );
-    await insertRejections(result.rejected, claimedDates);
+    await insertRejections(result.rejected, claimedDates, ownerUserId);
   }
 
   await upsertDocument({
+    ownerUserId,
     reportId: result.reportId, documentId: doc.documentId, source,
     subject: doc.subject, sender: doc.sender, senderDomain,
     department: result.department, reportDate: result.reportDate,
@@ -86,7 +94,7 @@ export async function commitDocument(
   });
 
   const analysisRebuilt = rowsWritten > 0;
-  if (analysisRebuilt) await rebuildAnalysis();
+  if (analysisRebuilt) await rebuildAnalysis(ownerUserId);
 
   await logEvent(
     result.rejected.length ? 'WARN' : 'INFO', 'Pipeline', 'commit',
@@ -104,16 +112,19 @@ export async function commitDocument(
  * dataset and writes them back. Repeat classification depends on every other
  * row, so it cannot be computed incrementally.
  */
-export async function rebuildAnalysis(): Promise<{ tasks: number; repeatGroups: number; slowTasks: number }> {
+export async function rebuildAnalysis(
+  ownerUserId: number
+): Promise<{ tasks: number; repeatGroups: number; slowTasks: number }> {
   const cfg = engineConfig();
-  const tasks = await loadTasks();
+  const tasks = await loadTasks(ownerUserId);
   const analysis = analyze(tasks, cfg);
   await writeAnalysisFlags(
     analysis.repeatByTaskId as Map<string, string>,
     analysis.slowFlagByTaskId as Map<string, string>,
-    analysis.varianceByTaskId
+    analysis.varianceByTaskId,
+    ownerUserId
   );
-  await replaceRepeatGroups(analysis.repeatGroups);
+  await replaceRepeatGroups(analysis.repeatGroups, ownerUserId);
   return {
     tasks: tasks.length,
     repeatGroups: analysis.repeatGroups.length,

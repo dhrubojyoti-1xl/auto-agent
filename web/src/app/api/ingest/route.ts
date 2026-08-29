@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { checkIngestToken } from '@/lib/auth';
+import { checkIngestToken, LOCAL_USER_ID } from '@/lib/auth';
 import { commitDocument } from '@/lib/pipeline';
 import { shortHash } from '@/lib/core/normalize';
 
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
       sender: String(body.sender || 'api'),
       receivedAt: String(body.receivedAt || new Date().toISOString()),
       html, text
-    }, String(body.source || 'email'));
+    }, String(body.source || 'email'), LOCAL_USER_ID);
 
     return NextResponse.json({
       ok: true,

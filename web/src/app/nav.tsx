@@ -9,7 +9,8 @@ const LINKS = [
   ['/repeats', 'Repeated tasks'],
   ['/slow', 'Slow tasks'],
   ['/quality', 'Data quality'],
-  ['/report', 'Management report']
+  ['/report', 'Management report'],
+  ['/health', 'Sync health']
 ];
 
 export default function Nav() {

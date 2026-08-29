@@ -1,16 +1,16 @@
 import { NextResponse } from 'next/server';
 import { randomBytes } from 'crypto';
-import { isAuthenticated } from '@/lib/auth';
 import { buildAuthUrl, googleConfigured } from '@/lib/google-oauth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /** Starts the Google consent flow. */
+/**
+ * "Continue with Google". This is the primary sign-in, so it must work with no
+ * existing session — one consent covers both identity and Gmail read access.
+ */
 export async function GET(req: Request) {
-  if (!await isAuthenticated()) {
-    return NextResponse.redirect(new URL('/login', req.url));
-  }
   if (!googleConfigured()) {
     return NextResponse.redirect(new URL('/connect?error=not_configured', req.url));
   }

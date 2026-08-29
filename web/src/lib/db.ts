@@ -89,9 +89,11 @@ export async function loadMasters(): Promise<Masters> {
 /* Fingerprints — the idempotency index                                        */
 /* -------------------------------------------------------------------------- */
 
-export async function loadFingerprints(): Promise<Map<string, string>> {
+/** Fingerprints for ONE user. Duplicate detection is per mailbox, not global. */
+export async function loadFingerprints(ownerUserId: number): Promise<Map<string, string>> {
   const rows = await query<{ task_fingerprint: string; source_document_id: string }>(
-    'select task_fingerprint, source_document_id from tasks'
+    'select task_fingerprint, source_document_id from tasks where owner_user_id = $1',
+    [ownerUserId]
   );
   return new Map(rows.map(r => [r.task_fingerprint, r.source_document_id]));
 }
@@ -100,7 +102,7 @@ export async function loadFingerprints(): Promise<Map<string, string>> {
 /* Tasks                                                                       */
 /* -------------------------------------------------------------------------- */
 
-export async function loadTasks(): Promise<TaskRecord[]> {
+export async function loadTasks(ownerUserId: number): Promise<TaskRecord[]> {
   const rows = await query<Record<string, unknown>>(
     `select task_id, report_id, task_date, department, employee_name, employee_id,
             task, task_normalized, task_category, task_status, priority,
@@ -108,7 +110,8 @@ export async function loadTasks(): Promise<TaskRecord[]> {
             expected_duration, actual_duration, duration_basis, link,
             source_document_id, source_document_date, data_quality_status,
             data_quality_notes, task_fingerprint, notes
-     from tasks order by task_date, employee_name, task_id`
+     from tasks where owner_user_id = $1
+     order by task_date, employee_name, task_id`, [ownerUserId]
   );
   return rows.map(rowToTask);
 }
@@ -144,7 +147,7 @@ function rowToTask(r: Record<string, unknown>): TaskRecord {
  * cannot create a duplicate.
  * Returns how many rows were actually written.
  */
-export async function insertTasks(tasks: TaskRecord[]): Promise<number> {
+export async function insertTasks(tasks: TaskRecord[], ownerUserId: number): Promise<number> {
   if (!tasks.length) return 0;
   const client = await getPool().connect();
   try {
@@ -158,15 +161,15 @@ export async function insertTasks(tasks: TaskRecord[]): Promise<number> {
            start_date, start_time, completion_date, completion_time,
            expected_duration, actual_duration, duration_basis, link,
            source_document_id, source_document_date, data_quality_status,
-           data_quality_notes, task_fingerprint, notes)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
-         on conflict (task_fingerprint) do nothing`,
+           data_quality_notes, task_fingerprint, notes, owner_user_id)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
+         on conflict (owner_user_id, task_fingerprint) do nothing`,
         [t.taskId, t.reportId || null, t.date, t.department, t.employeeName, t.employeeId,
          t.task, t.taskNormalized, t.taskCategory || null, t.taskStatus, t.priority || null,
          t.startDate, t.startTime, t.completionDate, t.completionTime,
          t.expectedDuration, t.actualDuration, t.durationBasis, t.link || null,
          t.sourceDocumentId, t.sourceDocumentDate || null, t.dataQualityStatus,
-         t.dataQualityNotes || null, t.taskFingerprint, t.notes || null]
+         t.dataQualityNotes || null, t.taskFingerprint, t.notes || null, ownerUserId]
       );
       written += res.rowCount ?? 0;
     }
@@ -180,24 +183,28 @@ export async function insertTasks(tasks: TaskRecord[]): Promise<number> {
   }
 }
 
-export async function insertRejections(rows: RejectedRow[], claimedDates: (string | null)[]): Promise<number> {
+export async function insertRejections(
+  rows: RejectedRow[], claimedDates: (string | null)[], ownerUserId: number
+): Promise<number> {
   if (!rows.length) return 0;
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     await query(
       `insert into data_quality
          (report_id, document_id, table_index, row_index, rejection_reason,
-          rejection_detail, raw_row, claimed_date)
-       values ($1,$2,$3,$4,$5,$6,$7,$8)
-       on conflict (document_id, table_index, row_index, rejection_reason) do nothing`,
+          rejection_detail, raw_row, claimed_date, owner_user_id)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       on conflict (owner_user_id, document_id, table_index, row_index, rejection_reason)
+       do nothing`,
       [r.reportId, r.documentId, r.tableIndex, r.rowIndex, r.reason,
-       r.detail, JSON.stringify(r.raw), claimedDates[i]]
+       r.detail, JSON.stringify(r.raw), claimedDates[i], ownerUserId]
     );
   }
   return rows.length;
 }
 
 export async function upsertDocument(d: {
+  ownerUserId: number;
   reportId: string; documentId: string; source: string; subject: string;
   sender: string; senderDomain: string; department: string; reportDate: string | null;
   receivedAt: string; status: string; tablesFound: number; rowsExtracted: number;
@@ -207,9 +214,9 @@ export async function upsertDocument(d: {
     `insert into documents (report_id, document_id, source, subject, sender, sender_domain,
        department, report_date, received_at, processing_status, tables_found,
        rows_extracted, rows_inserted, rows_skipped_idempotent, rows_rejected,
-       error_message, processed_at)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16, now())
-     on conflict (report_id) do update set
+       error_message, owner_user_id, processed_at)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, now())
+     on conflict (owner_user_id, report_id) do update set
        processing_status = excluded.processing_status,
        tables_found = excluded.tables_found,
        rows_extracted = excluded.rows_extracted,
@@ -220,7 +227,8 @@ export async function upsertDocument(d: {
        processed_at = now()`,
     [d.reportId, d.documentId, d.source, d.subject, d.sender, d.senderDomain,
      d.department || null, d.reportDate, d.receivedAt, d.status, d.tablesFound,
-     d.rowsExtracted, d.rowsInserted, d.rowsSkipped, d.rowsRejected, d.error || null]
+     d.rowsExtracted, d.rowsInserted, d.rowsSkipped, d.rowsRejected, d.error || null,
+     d.ownerUserId]
   );
 }
 
@@ -239,7 +247,8 @@ export async function upsertEmployees(employees: Employee[]): Promise<void> {
 export async function writeAnalysisFlags(
   repeat: Map<string, string>,
   slowFlag: Map<string, string>,
-  variance: Map<string, number | null>
+  variance: Map<string, number | null>,
+  ownerUserId: number
 ): Promise<void> {
   const ids = [...slowFlag.keys()];
   if (!ids.length) return;
@@ -256,28 +265,32 @@ export async function writeAnalysisFlags(
               unnest($4::text[]) as slow_flag,
               unnest($5::numeric[]) as variance
      ) v
-     where t.task_id = v.task_id`,
+     where t.task_id = v.task_id and t.owner_user_id = $6`,
     [ids,
      ids.map(id => repeat.has(id)),
      ids.map(id => repeat.get(id) ?? ''),
      ids.map(id => slowFlag.get(id) ?? 'INSUFFICIENT_DATA'),
-     ids.map(id => variance.get(id) ?? null)]
+     ids.map(id => variance.get(id) ?? null), ownerUserId]
   );
 }
 
-export async function replaceRepeatGroups(groups: RepeatGroup[]): Promise<void> {
+export async function replaceRepeatGroups(
+  groups: RepeatGroup[], ownerUserId: number
+): Promise<void> {
   // Repeat groups are a derived cache; rebuilding wholesale is correct and
-  // cheaper than diffing.
-  await query('delete from repeat_groups');
+  // cheaper than diffing. Scoped, or one user's rebuild wipes another's.
+  await query('delete from repeat_groups where owner_user_id = $1', [ownerUserId]);
   for (const g of groups) {
     await query(
       `insert into repeat_groups (repeat_key, employee, department, task, normalized_task,
          occurrence_count, distinct_dates, max_same_day_count, first_date, last_date,
-         dates, completed_count, open_count, classification, classification_reason)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+         dates, completed_count, open_count, classification, classification_reason,
+         owner_user_id)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
       [g.repeatKey, g.employee, g.department, g.task, g.normalizedTask,
        g.occurrenceCount, g.distinctDates, g.maxSameDayCount, g.firstDate, g.lastDate,
-       g.dates, g.completedCount, g.openCount, g.classification, g.classificationReason]
+       g.dates, g.completedCount, g.openCount, g.classification, g.classificationReason,
+       ownerUserId]
     );
   }
 }

@@ -11,28 +11,37 @@ beforeAll(() => {
 });
 
 describe('session tokens', () => {
-  it('accepts a token it issued', async () => {
+  it('accepts a token it issued and returns the user it names', async () => {
     const { issueToken, verifyToken } = await import('../src/lib/auth');
-    expect(verifyToken(issueToken())).toBe(true);
+    expect(verifyToken(issueToken(7, 'google'))).toEqual({ userId: 7, kind: 'google' });
+    expect(verifyToken(issueToken(1, 'local'))).toEqual({ userId: 1, kind: 'local' });
+  });
+
+  it('a forged user id is rejected, so a session cannot be re-pointed', async () => {
+    const { issueToken, verifyToken } = await import('../src/lib/auth');
+    const t = issueToken(7, 'google');
+    const [, kind, issued, nonce, mac] = t.split('.');
+    // Swapping the user id invalidates the signature over the whole payload.
+    expect(verifyToken(['9', kind, issued, nonce, mac].join('.'))).toBeNull();
   });
 
   it('rejects a tampered token', async () => {
     const { issueToken, verifyToken } = await import('../src/lib/auth');
-    const t = issueToken();
-    const [issued, nonce, mac] = t.split('.');
+    const t = issueToken(1, 'local');
+    const [uid, kind, issued, nonce, mac] = t.split('.');
     // Flip the last character to something it definitely is not, otherwise the
     // "tampered" MAC can coincidentally equal the original and the test flakes.
     const flipped = mac.slice(0, -1) + (mac.slice(-1) === 'A' ? 'B' : 'A');
     expect(flipped).not.toBe(mac);
-    expect(verifyToken(`${issued}.${nonce}.${flipped}`)).toBe(false);
-    expect(verifyToken(`${issued}.${nonce}x.${mac}`)).toBe(false);
-    expect(verifyToken(`${Number(issued) + 1}.${nonce}.${mac}`)).toBe(false);
+    expect(verifyToken(`${uid}.${kind}.${issued}.${nonce}.${flipped}`)).toBeNull();
+    expect(verifyToken(`${uid}.${kind}.${issued}.${nonce}x.${mac}`)).toBeNull();
+    expect(verifyToken(`${uid}.${kind}.${Number(issued) + 1}.${nonce}.${mac}`)).toBeNull();
   });
 
   it('rejects rubbish', async () => {
     const { verifyToken } = await import('../src/lib/auth');
     [undefined, '', 'x', 'a.b', 'a.b.c.d'].forEach(v => {
-      expect(verifyToken(v as string | undefined)).toBe(false);
+      expect(verifyToken(v as string | undefined)).toBeNull();
     });
   });
 
@@ -40,10 +49,10 @@ describe('session tokens', () => {
     const { verifyToken } = await import('../src/lib/auth');
     const { createHmac } = await import('crypto');
     const old = String(Date.now() - 8 * 24 * 3600 * 1000);
-    const payload = `${old}.deadbeef`;
+    const payload = `1.local.${old}.deadbeef`;
     const mac = createHmac('sha256', process.env.SESSION_SECRET as string)
       .update(payload).digest('base64url');
-    expect(verifyToken(`${payload}.${mac}`)).toBe(false);
+    expect(verifyToken(`${payload}.${mac}`)).toBeNull();
   });
 });
 
@@ -76,7 +85,9 @@ describe('middleware public paths', () => {
     expect(match).toBeTruthy();
     const paths = (match as RegExpMatchArray)[1]
       .split(',').map(s => s.trim().replace(/['"]/g, '')).filter(Boolean);
-    expect(paths.sort()).toEqual(['/api/health', '/api/ingest', '/api/login', '/login']);
+    expect(paths.sort()).toEqual([
+      '/api/auth/google', '/api/health', '/api/ingest', '/api/login', '/login'
+    ]);
   });
 
   it('middleware lives inside src/, where Next.js will actually load it', async () => {

@@ -12,7 +12,11 @@
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | something is wrong |
 | [DEMO_SCRIPT.md](DEMO_SCRIPT.md) | the Monday demo, minute by minute |
 | [WEB_APP.md](WEB_APP.md) | the hosted version and the automatic inbox flow |
-| [GOOGLE_OAUTH_SETUP.md](GOOGLE_OAUTH_SETUP.md) | one-time Google Cloud setup for Gmail access |
-| [DEPLOYMENT.md](DEPLOYMENT.md) | deploying the web app to Supabase + Vercel |
+| [GMAIL_SETUP.md](GMAIL_SETUP.md) | **what the manager actually does** — connect once, then nothing |
+| [GOOGLE_OAUTH_SETUP.md](GOOGLE_OAUTH_SETUP.md) | one-time Google Cloud setup (administrator) |
+| [SUPABASE_SETUP.md](SUPABASE_SETUP.md) | database setup and schema |
+| [ATTACHMENT_FORMATS.md](ATTACHMENT_FORMATS.md) | what is parsed, and what genuinely is not |
+| [SECURITY.md](SECURITY.md) | identity, Gmail scope, tokens at rest, multi-user isolation |
+| [VERCEL_DEPLOYMENT.md](VERCEL_DEPLOYMENT.md) | deploying the web app to Supabase + Vercel |
 
 Start with the root [README.md](../README.md).

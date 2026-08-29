@@ -8,6 +8,7 @@ import { refreshAccessToken, revokeToken } from './google-oauth';
 
 export interface GmailAccount {
   id: number;
+  ownerUserId: number;
   email: string;
   googleSub: string;
   displayName: string;
@@ -24,7 +25,8 @@ export interface GmailAccount {
 
 function rowToAccount(r: Record<string, unknown>): GmailAccount {
   return {
-    id: Number(r.id), email: String(r.email), googleSub: String(r.google_sub),
+    id: Number(r.id), ownerUserId: Number(r.owner_user_id),
+    email: String(r.email), googleSub: String(r.google_sub),
     displayName: String(r.display_name ?? ''), pictureUrl: String(r.picture_url ?? ''),
     refreshTokenEnc: String(r.refresh_token_enc), scopes: (r.scopes as string[]) || [],
     connectedAt: String(r.connected_at),
@@ -35,27 +37,38 @@ function rowToAccount(r: Record<string, unknown>): GmailAccount {
   };
 }
 
-export async function listGmailAccounts(): Promise<GmailAccount[]> {
-  const rows = await query<Record<string, unknown>>(
-    `select * from gmail_accounts where active order by connected_at`);
+/** Accounts for ONE user. Pass null only for the cron, which sweeps everyone. */
+export async function listGmailAccounts(ownerUserId: number | null): Promise<GmailAccount[]> {
+  const rows = ownerUserId === null
+    ? await query<Record<string, unknown>>(
+        `select * from gmail_accounts where active order by connected_at`)
+    : await query<Record<string, unknown>>(
+        `select * from gmail_accounts where active and owner_user_id = $1
+         order by connected_at`, [ownerUserId]);
   return rows.map(rowToAccount);
 }
 
-export async function getGmailAccount(id: number): Promise<GmailAccount | null> {
+/**
+ * Always scoped by owner: without it, knowing an id would be enough to read
+ * somebody else's mailbox settings.
+ */
+export async function getGmailAccount(id: number, ownerUserId: number): Promise<GmailAccount | null> {
   const rows = await query<Record<string, unknown>>(
-    `select * from gmail_accounts where id = $1`, [id]);
+    `select * from gmail_accounts where id = $1 and owner_user_id = $2`, [id, ownerUserId]);
   return rows.length ? rowToAccount(rows[0]) : null;
 }
 
 export async function upsertGmailAccount(a: {
+  ownerUserId: number;
   email: string; googleSub: string; displayName: string; pictureUrl: string;
   refreshToken: string; scopes: string[];
 }): Promise<GmailAccount> {
   const rows = await query<Record<string, unknown>>(
     `insert into gmail_accounts
-       (email, google_sub, display_name, picture_url, refresh_token_enc, scopes, active, revoked_at)
-     values ($1,$2,$3,$4,$5,$6,true,null)
-     on conflict (google_sub) do update set
+       (owner_user_id, email, google_sub, display_name, picture_url,
+        refresh_token_enc, scopes, active, revoked_at)
+     values ($7,$1,$2,$3,$4,$5,$6,true,null)
+     on conflict (owner_user_id, google_sub) do update set
        email = excluded.email,
        display_name = excluded.display_name,
        picture_url = excluded.picture_url,
@@ -66,7 +79,7 @@ export async function upsertGmailAccount(a: {
        connected_at = now()
      returning *`,
     [a.email, a.googleSub, a.displayName, a.pictureUrl,
-     encryptSecret(a.refreshToken), a.scopes]
+     encryptSecret(a.refreshToken), a.scopes, a.ownerUserId]
   );
   return rowToAccount(rows[0]);
 }
@@ -79,15 +92,15 @@ export async function recordSyncResult(id: number, status: string, message: stri
   );
 }
 
-export async function disconnectGmailAccount(id: number): Promise<void> {
-  const acct = await getGmailAccount(id);
+export async function disconnectGmailAccount(id: number, ownerUserId: number): Promise<void> {
+  const acct = await getGmailAccount(id, ownerUserId);
   if (!acct) return;
   // Best-effort revocation at Google, then forget the token locally. Order
   // matters: if revocation fails we still stop holding the credential.
   try { await revokeToken(decryptSecret(acct.refreshTokenEnc)); } catch { /* ignore */ }
   await query(
     `update gmail_accounts set active = false, revoked_at = now(),
-       refresh_token_enc = 'revoked' where id = $1`, [id]);
+       refresh_token_enc = 'revoked' where id = $1 and owner_user_id = $2`, [id, ownerUserId]);
 }
 
 /**
@@ -127,11 +140,12 @@ export async function getAccessTokenFor(
   return res.access_token;
 }
 
-export async function listSyncRuns(limit = 20) {
+export async function listSyncRuns(ownerUserId: number, limit = 20) {
   const rows = await query<Record<string, unknown>>(
     `select r.*, a.email from sync_runs r
        left join gmail_accounts a on a.id = r.gmail_account_id
-     order by r.started_at desc limit $1`, [limit]);
+     where r.owner_user_id = $2
+     order by r.started_at desc limit $1`, [limit, ownerUserId]);
   return rows.map(r => ({
     id: Number(r.id), email: String(r.email ?? ''), trigger: String(r.trigger),
     status: String(r.status), startedAt: String(r.started_at),

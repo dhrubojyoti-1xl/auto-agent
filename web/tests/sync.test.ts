@@ -13,9 +13,8 @@
  * Needs TEST_DATABASE_URL; skipped otherwise.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import ExcelJS from 'exceljs';
+import { resetDatabase } from './helpers';
 
 const DB = process.env.TEST_DATABASE_URL;
 const d = DB ? describe : describe.skip;
@@ -158,10 +157,7 @@ d('automatic Gmail ingestion', () => {
     seedDb = await import('../src/lib/seed-db');
     crypto_ = await import('../src/lib/crypto');
 
-    const schema = readFileSync(join(__dirname, '..', 'supabase', 'schema.sql'), 'utf8');
-    await db.query('drop schema public cascade; create schema public;');
-    await db.query(schema);
-    await seedDb.seedDatabase({ includeDemoEmployees: true });
+    await resetDatabase(db, seedDb);
   });
 
   afterAll(async () => { vi.unstubAllGlobals(); await db.getPool().end(); });
@@ -197,8 +193,9 @@ d('automatic Gmail ingestion', () => {
     const existing = await db.query('select * from gmail_accounts limit 1');
     if (existing.length) return existing[0];
     await db.query(
-      `insert into gmail_accounts (email, google_sub, display_name, refresh_token_enc, scopes, sync_since)
-       values ($1,$2,$3,$4,$5,$6)`,
+      `insert into gmail_accounts (email, google_sub, display_name, refresh_token_enc,
+         scopes, sync_since, owner_user_id)
+       values ($1,$2,$3,$4,$5,$6,1)`,
       ['manager@company.com', 'google-sub-1', 'Manager',
        crypto_.encryptSecret('fake-refresh-token'),
        ['https://www.googleapis.com/auth/gmail.readonly'], '2026-08-01']
@@ -215,7 +212,7 @@ d('automatic Gmail ingestion', () => {
 
   it('reads the inbox and imports every report, with no user action', async () => {
     const row = await connectedAccount();
-    const account = await accounts.getGmailAccount(Number(row.id));
+    const account = await accounts.getGmailAccount(Number(row.id), 1);
     const summary = await sync.syncAccount(account, 'test');
 
     expect(summary.status).toBe('OK');
@@ -272,7 +269,7 @@ d('automatic Gmail ingestion', () => {
 
   it('IDEMPOTENT: syncing again reads nothing and changes nothing', async () => {
     const row = await connectedAccount();
-    const account = await accounts.getGmailAccount(Number(row.id));
+    const account = await accounts.getGmailAccount(Number(row.id), 1);
     const before = await db.query('select count(*)::int as n from tasks');
     const summary = await sync.syncAccount(account, 'test');
     const after = await db.query('select count(*)::int as n from tasks');
@@ -288,7 +285,7 @@ d('automatic Gmail ingestion', () => {
       from: 'Assistant <pa@company.com>', internalDate, html: REPORT_HTML
     });
     const row = await connectedAccount();
-    const account = await accounts.getGmailAccount(Number(row.id));
+    const account = await accounts.getGmailAccount(Number(row.id), 1);
     const before = await db.query('select count(*)::int as n from tasks');
     const summary = await sync.syncAccount(account, 'test');
     const after = await db.query('select count(*)::int as n from tasks');
@@ -320,7 +317,7 @@ d('automatic Gmail ingestion', () => {
       throw new Error('should not reach Gmail');
     }));
     const row = await connectedAccount();
-    const account = await accounts.getGmailAccount(Number(row.id));
+    const account = await accounts.getGmailAccount(Number(row.id), 1);
     const summary = await sync.syncAccount(account, 'test');
     expect(summary.status).toBe('REAUTH_REQUIRED');
 
@@ -331,7 +328,7 @@ d('automatic Gmail ingestion', () => {
   it('analysis and the dashboard views reflect the imported mail', async () => {
     accounts.clearTokenCache();
     installFetchMock();
-    await sync.rebuildAnalysisAfterSync();
+    await sync.rebuildAnalysisAfterSync(1);
     const [kpi] = await db.query(
       `select count(*)::int as total,
               count(*) filter (where task_status='Completed')::int as completed
