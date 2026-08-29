@@ -76,6 +76,14 @@ const DEFAULT_CONFIG = {
   AI_MAX_RETRIES: 1,
   AI_TIMEOUT_NOTE: 'UrlFetchApp has no timeout option; keep payloads small.',
 
+  // --- Bridge to the hosted web app (optional) ------------------------------
+  // When enabled, each processed email is ALSO posted to the web app so Gmail
+  // automation and the hosted dashboard share one database. The token lives in
+  // Script Properties (setBridgeToken), never here and never in a cell.
+  BRIDGE_ENABLED: false,
+  BRIDGE_URL: '',                        // https://<app>.vercel.app/api/ingest
+  BRIDGE_ONLY: false,                    // TRUE = do not write to this Sheet
+
   // --- Reporting -----------------------------------------------------------
   MANAGEMENT_EMAIL: '',                  // blank = do not email the summary
   EMAIL_DAILY_REPORT: false,
@@ -107,6 +115,7 @@ const CONFIG_TYPES = {
   LOG_MAX_ROWS: 'int',
   SLOW_TASK_MULTIPLIER: 'float', SIMILARITY_THRESHOLD: 'float',
   REQUIRE_KNOWN_TABLE_HEADER: 'bool', PARSE_PLAINTEXT_PIPE_TABLES: 'bool',
+  BRIDGE_ENABLED: 'bool', BRIDGE_ONLY: 'bool',
   REJECT_UNKNOWN_STATUS: 'bool', REJECT_UNKNOWN_EMPLOYEE: 'bool',
   AUTO_CREATE_EMPLOYEES: 'bool', AUTO_CREATE_DEPARTMENTS: 'bool',
   AI_ENABLED: 'bool', EMAIL_DAILY_REPORT: 'bool', EMAIL_WEEKLY_REPORT: 'bool',

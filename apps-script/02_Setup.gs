@@ -80,6 +80,9 @@ function seedConfigSheet_() {
     AI_ENABLED: 'FALSE keeps the whole system working without any AI.',
     AI_PROVIDER: 'manual | gemini | custom_http',
     MANAGEMENT_EMAIL: 'Where to email the summary. Blank = do not email.',
+    BRIDGE_ENABLED: 'TRUE = also post each email to the hosted web app.',
+    BRIDGE_URL: 'https://<your-app>.vercel.app/api/ingest',
+    BRIDGE_ONLY: 'TRUE = send to the web app only, do not write to this Sheet.',
     TRIGGER_INGEST_EVERY_MINUTES: '0 disables the ingest trigger. Else 5/10/15/30/60.'
   };
   const rows = Object.keys(DEFAULT_CONFIG).map(function (k) {

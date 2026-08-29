@@ -1,0 +1,11 @@
+node_modules/
+.next/
+out/
+.vercel/
+*.tsbuildinfo
+next-env.d.ts
+
+# local secrets — never committed
+.env
+.env.local
+.env*.local

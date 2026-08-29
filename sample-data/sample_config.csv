@@ -34,6 +34,9 @@ AI_MODEL,gemini-2.0-flash,
 AI_ENDPOINT,,
 AI_MAX_RETRIES,1,
 AI_TIMEOUT_NOTE,UrlFetchApp has no timeout option; keep payloads small.,
+BRIDGE_ENABLED,FALSE,TRUE = also post each email to the hosted web app.
+BRIDGE_URL,,https://<your-app>.vercel.app/api/ingest
+BRIDGE_ONLY,FALSE,"TRUE = send to the web app only, do not write to this Sheet."
 MANAGEMENT_EMAIL,,Where to email the summary. Blank = do not email.
 EMAIL_DAILY_REPORT,FALSE,
 EMAIL_WEEKLY_REPORT,FALSE,

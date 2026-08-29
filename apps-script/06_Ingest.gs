@@ -127,7 +127,7 @@ function ingestDocument_(doc, state, cfg) {
   const toInsert = [];
   var skippedIdempotent = 0;
 
-  candidates.forEach(function (rec) {
+  candidates.forEach(function (rec, candidateIndex) {
     const base = [
       fmtDate_(rec.date), Masters.keyify(rec.employeeName),
       Masters.keyify(rec.department), rec.taskNormalized, rec.status
@@ -152,8 +152,10 @@ function ingestDocument_(doc, state, cfg) {
                 ' of this Date+Employee+Task+Status). Not a repeated task: the same ' +
                 'occurrence number is already in the database.'
       }, {
+        // Carry the row's real position so every duplicate stays individually
+        // identifiable in Data_Quality.
         reportId: reportId, emailId: emailId, subject: subject, sender: from,
-        tableIndex: -1, rowIndex: -1, raw: rec.rawEcho
+        tableIndex: rec.tableIndex, rowIndex: rec.rowIndex, raw: rec.rawEcho
       }));
     }
   });
@@ -327,6 +329,8 @@ function buildTaskRecord_(raw, ctx) {
     record: {
       taskId: 'TSK-' + shortHash_(ctx.emailId + '|' + ctx.tableIndex + '|' + ctx.rowIndex + '|' + rawTask, 10).toUpperCase(),
       reportId: ctx.reportId,
+      tableIndex: ctx.tableIndex,
+      rowIndex: ctx.rowIndex,
       date: date,
       department: department,
       employeeName: emp.name,

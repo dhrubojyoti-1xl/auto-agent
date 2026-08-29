@@ -93,9 +93,26 @@ apps-script/         paste these 14 files into the Apps Script editor
 sample-data/         CSVs produced by the real pipeline + the Monday demo email
 test-emails/         15 ready-to-send fixtures covering every edge case
 tools/               Node harness that runs the Apps Script code locally
+web/                 OPTIONAL hosted version: Next.js + Supabase + Anthropic,
+                     running a TypeScript port of the same engine
 docs/                architecture, setup, Gmail, schema, dashboard, AI, tests,
-                     troubleshooting, demo script
+                     troubleshooting, demo script, web app, deployment
 ```
+
+## Two front ends, one engine
+
+| | `apps-script/` | `web/` |
+|---|---|---|
+| Database | Google Sheets | Postgres (Supabase) |
+| Dashboard | Looker Studio | built-in pages |
+| Cost | free | free tiers; Anthropic billed per call |
+| Gmail ingestion | direct | via the Apps Script bridge |
+
+The web app is a **direct port**, and `web/tests/parity.test.ts` proves it by
+running both implementations over the same 14 fixtures and comparing every
+field of every record — including the duplicate fingerprint. Start with the
+Sheets version if cost matters most; add the web app for a nicer experience.
+See [docs/WEB_APP.md](docs/WEB_APP.md) and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ---
 

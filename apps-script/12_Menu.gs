@@ -30,6 +30,11 @@ function onOpen() {
     .addSubMenu(SpreadsheetApp.getUi().createMenu('Automation')
       .addItem('Install triggers', 'installTriggers')
       .addItem('Remove triggers', 'removeTriggers'))
+    .addSubMenu(SpreadsheetApp.getUi().createMenu('Web app bridge (optional)')
+      .addItem('Store ingest token', 'setBridgeToken')
+      .addItem('Test bridge connection', 'testBridge')
+      .addItem('Forward new reports to web app', 'bridgeForwardNewReports')
+      .addItem('Clear ingest token', 'clearBridgeToken'))
     .addSubMenu(SpreadsheetApp.getUi().createMenu('Maintenance')
       .addItem('Clear demo/transactional data', 'clearTransactionalData'))
     .addToUi();
@@ -106,6 +111,9 @@ function getSystemStatus() {
     aiEnabled: cfg.AI_ENABLED,
     aiProvider: cfg.AI_PROVIDER,
     aiKeyStored: getApiKey_() ? 'yes' : 'no',
+    bridgeEnabled: cfg.BRIDGE_ENABLED,
+    bridgeUrl: cfg.BRIDGE_URL || '(not set)',
+    bridgeTokenStored: getBridgeToken_() ? 'yes' : 'no',
     triggers: triggerInfo,
     searchQuery: cfg.SEARCH_QUERY,
     lastError: lastError
@@ -141,6 +149,11 @@ function formatSystemStatus_(s) {
   L.push('  Enabled               : ' + (s.aiEnabled ? 'yes' : 'no'));
   L.push('  Provider              : ' + s.aiProvider);
   L.push('  API key stored        : ' + s.aiKeyStored);
+  L.push('');
+  L.push('WEB APP BRIDGE');
+  L.push('  Enabled               : ' + (s.bridgeEnabled ? 'yes' : 'no'));
+  L.push('  Endpoint              : ' + s.bridgeUrl);
+  L.push('  Token stored          : ' + s.bridgeTokenStored);
   L.push('');
   L.push('AUTOMATION');
   L.push('  Gmail search          : ' + s.searchQuery);

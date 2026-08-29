@@ -64,7 +64,35 @@ function processIncomingReports() {
 
       var result;
       try {
-        result = processOneMessage_(msg, threads[t], state, cfg);
+        if (cfg.BRIDGE_ENABLED && cfg.BRIDGE_ONLY) {
+          // The web app is the database; this Sheet is not written to.
+          var html = '', plain = '';
+          try { html = msg.getBody() || ''; } catch (e) {}
+          try { plain = msg.getPlainBody() || ''; } catch (e) {}
+          var bridged = bridgeSendDocument_({
+            emailId: emailId, subject: msg.getSubject() || '', from: msg.getFrom() || '',
+            received: msg.getDate(), html: html, plain: plain
+          });
+          result = bridged
+            ? { status: bridged.status === 'NO_DATA' ? 'NO_DATA' : 'SUCCESS',
+                inserted: bridged.rowsInserted, rejected: bridged.rowsRejected,
+                skipped: bridged.rowsSkippedIdempotent, tables: 0,
+                extracted: bridged.rowsExtracted }
+            : { status: 'FAILED', inserted: 0, rejected: 0, skipped: 0,
+                tables: 0, extracted: 0, error: 'Bridge post failed' };
+        } else {
+          result = processOneMessage_(msg, threads[t], state, cfg);
+          if (cfg.BRIDGE_ENABLED) {
+            // Additive mirror: a bridge failure must never fail the Sheet import.
+            var h = '', p2 = '';
+            try { h = msg.getBody() || ''; } catch (e) {}
+            try { p2 = msg.getPlainBody() || ''; } catch (e) {}
+            bridgeSendDocument_({
+              emailId: emailId, subject: msg.getSubject() || '', from: msg.getFrom() || '',
+              received: msg.getDate(), html: h, plain: p2
+            });
+          }
+        }
       } catch (e) {
         result = {
           status: 'FAILED', inserted: 0, rejected: 0, skipped: 0,
