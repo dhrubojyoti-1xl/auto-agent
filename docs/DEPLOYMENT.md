@@ -48,6 +48,25 @@ npx vercel --prod
 The first deploy will run, and the app will report that the database is not yet
 configured — that is expected until step 5.
 
+## STEP 4b — Turn off Deployment Protection
+
+**This is easy to miss and it blocks everything.** If your Vercel team has
+*Vercel Authentication* enabled, every deployment — production included —
+redirects to Vercel SSO, so your team cannot reach the app at all:
+
+```bash
+curl -s -o /dev/null -w "%{http_code} -> %{redirect_url}\n" https://<your-app>.vercel.app/api/health
+# 302 -> https://vercel.com/sso-api?url=...
+```
+
+Fix it in **Project → Settings → Deployment Protection → Vercel Authentication
+→ Disabled** (Standard Protection is on by default for team projects). There is
+no CLI command for this; it is a dashboard toggle.
+
+Turning it off is safe here because the app has its own authentication: every
+page redirects to `/login`, and every private API returns 401 without a valid
+signed session cookie.
+
 ## STEP 5 — Set the environment variables
 
 **Vercel dashboard → your project → Settings → Environment Variables.** Add
@@ -159,6 +178,7 @@ is the nicer experience.
 
 | Symptom | Cause | Fix |
 |---|---|---|
+| Every URL redirects to `vercel.com/sso-api` | Deployment Protection | Step 4b — dashboard toggle, no CLI equivalent |
 | `DATABASE_URL is not set` | env var missing or set for the wrong environment | Vercel → Settings → Environment Variables, tick **Production**, redeploy |
 | `too many connections` | using the direct 5432 string | switch to the pooler (6543) |
 | `SESSION_SECRET is not set` | missing env var | add it; the app fails loudly rather than accepting forgeable sessions |
