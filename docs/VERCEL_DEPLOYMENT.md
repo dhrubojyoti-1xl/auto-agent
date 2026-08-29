@@ -14,7 +14,7 @@ an Anthropic key if you want AI commentary. Everything else is scripted.
 Once `DATABASE_URL` exists in the Vercel production environment:
 
 ```bash
-cd web && ./scripts/finish-deploy.sh
+./scripts/finish-deploy.sh
 ```
 
 That pulls the environment, applies the schema, seeds the master data,
@@ -29,7 +29,7 @@ redeploys, and runs the acceptance test.
    cannot be automated.
 2. Then run `npx vercel integration add supabase` — it provisions the database
    and injects `DATABASE_URL` automatically.
-3. `cd web && ./scripts/finish-deploy.sh`
+3. `./scripts/finish-deploy.sh`
 
 **B. Existing Supabase project (paste one value)**
 
@@ -37,7 +37,7 @@ redeploys, and runs the acceptance test.
    URI (port **6543**).
 2. Vercel → Settings → Environment Variables → add `DATABASE_URL` for
    Production.
-3. `cd web && ./scripts/finish-deploy.sh`
+3. `./scripts/finish-deploy.sh`
 
 ---
 
@@ -50,7 +50,7 @@ redeploys, and runs the acceptance test.
 ## STEP 2 — Apply the schema
 
 **Supabase dashboard → SQL Editor → New query.** Paste the whole of
-`web/supabase/schema.sql` and run it.
+`supabase/schema.sql` and run it.
 
 Expected: `Success. No rows returned.` It creates 12 tables and 6 views, enables
 row-level security on everything, and is safe to re-run.
@@ -145,7 +145,7 @@ npx vercel --prod
 From your machine, with the pooler string in your environment:
 
 ```bash
-cd web && DATABASE_URL="<pooler string>" npm run seed
+DATABASE_URL="<pooler string>" npm run seed
 ```
 
 That inserts the six statuses, ~50 status aliases, ~80 header aliases, the

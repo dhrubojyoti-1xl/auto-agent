@@ -16,7 +16,7 @@ const d = DB ? describe : describe.skip;
 
 process.env.DATABASE_URL = DB || 'postgres://localhost/does-not-exist';
 
-const ROOT = join(__dirname, '..', '..');
+const ROOT = join(__dirname, '..');
 
 d('pipeline against Postgres', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

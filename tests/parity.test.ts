@@ -19,7 +19,7 @@ import { DEFAULT_ENGINE_CONFIG } from '../src/lib/core/types';
 import { seedMasters, STATUS_ALIASES, HEADER_ALIASES, GAS_FIELD_TO_WEB,
          SEED_CATEGORIES, SEED_DEPARTMENTS, SEED_EMPLOYEES } from '../src/lib/seed';
 
-const ROOT = join(__dirname, '..', '..');
+const ROOT = join(__dirname, '..');
 const require_ = createRequire(import.meta.url);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

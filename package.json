@@ -1,13 +1,41 @@
 {
   "name": "auto-agent",
   "version": "1.0.0",
-  "description": "Free-first department report automation: Gmail -> Google Apps Script -> Google Sheets -> Looker Studio, with an optional AI summary layer.",
   "private": true,
+  "description": "Free-first department report automation: Gmail -> Google Apps Script -> Google Sheets -> Looker Studio, with an optional AI summary layer.",
   "scripts": {
-    "test": "node tools/run-tests.js",
-    "test:verbose": "node tools/run-tests.js --verbose",
-    "export": "node tools/export-fixtures.js"
+    "dev": "next dev -p 3210",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:apps-script": "node tools/run-tests.js",
+    "test:all": "node tools/run-tests.js && vitest run",
+    "seed": "npx tsx scripts/seed.ts",
+    "export-fixtures": "node tools/export-fixtures.js",
+    "verify": "./scripts/verify-production.sh"
   },
-  "engines": { "node": ">=16" },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.30.1",
+    "exceljs": "^4.4.0",
+    "next": "^15.0.0",
+    "pg": "^8.13.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tsx": "^4.23.12"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "@types/pg": "^8.11.10",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.3"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "license": "UNLICENSED"
 }

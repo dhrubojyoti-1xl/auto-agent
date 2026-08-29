@@ -98,7 +98,7 @@ node -e "console.log('CRON_SECRET', require('crypto').randomBytes(32).toString('
 Redeploy so the values take effect:
 
 ```bash
-cd web && npx vercel --prod
+npx vercel --prod
 ```
 
 ## STEP 6 — Confirm

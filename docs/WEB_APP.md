@@ -27,7 +27,7 @@ This is a second front end over the **same tested engine** as the Apps Script
 system, which remains complete on its own.
 
 ```
-$ cd web && npm test
+$ npm test
 72 passed (51 parity + 13 database + 8 auth)
 ```
 
@@ -47,7 +47,7 @@ $ cd web && npm test
 
 The parsing, normalisation, validation, deduplication, repeat classification,
 slow-task detection, metrics and report rendering are a **direct port** of the
-Apps Script engine — and `web/tests/parity.test.ts` proves it, by running both
+Apps Script engine — and `tests/parity.test.ts` proves it, by running both
 implementations over the same 14 fixtures and comparing every field of every
 record, including the duplicate fingerprint. If the two ever diverge, that test
 fails.

@@ -73,6 +73,12 @@ is exactly why the AI layer is optional and defaults to `manual`.
 ## Repository layout
 
 ```
+src/                 the Next.js app (at the repository ROOT, so any Vercel
+                     project pointed at this repo builds with no Root Directory
+                     setting to configure)
+supabase/            schema.sql + ordered, idempotent migrations
+tests/               parity, database, sync, isolation, auth, attachments
+scripts/             seed, deploy finisher, production acceptance test
 apps-script/         paste these 14 files into the Apps Script editor
   00_Config.gs       all configuration (code defaults + Config sheet overrides)
   01_Schema.gs       every sheet and column, in one place
@@ -93,8 +99,6 @@ apps-script/         paste these 14 files into the Apps Script editor
 sample-data/         CSVs produced by the real pipeline + the Monday demo email
 test-emails/         15 ready-to-send fixtures covering every edge case
 tools/               Node harness that runs the Apps Script code locally
-web/                 OPTIONAL hosted version: Next.js + Supabase + Anthropic,
-                     running a TypeScript port of the same engine
 docs/                architecture, setup, Gmail, schema, dashboard, AI, tests,
                      troubleshooting, demo script, web app, deployment
 ```
@@ -123,7 +127,7 @@ Google OAuth setup and deployment are one-time administrator jobs:
 
 ## Two front ends, one engine
 
-| | `apps-script/` | `web/` |
+| | `apps-script/` | the repository root |
 |---|---|---|
 | Database | Google Sheets | Postgres (Supabase) |
 | Dashboard | Looker Studio | built-in pages |
@@ -131,7 +135,7 @@ Google OAuth setup and deployment are one-time administrator jobs:
 | Gmail ingestion | needs a label, `gmail.modify` | **OAuth, read-only, automatic** |
 | Attachments | not parsed | xlsx / csv parsed |
 
-The web app is a **direct port**, and `web/tests/parity.test.ts` proves it by
+The web app is a **direct port**, and `tests/parity.test.ts` proves it by
 running both implementations over the same 14 fixtures and comparing every
 field of every record — including the duplicate fingerprint. Start with the
 Sheets version if cost matters most; add the web app for a nicer experience.

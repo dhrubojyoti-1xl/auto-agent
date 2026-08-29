@@ -24,3 +24,13 @@ Thumbs.db
 *.log
 tmp/
 scratch/
+.next/
+out/
+.vercel/
+*.tsbuildinfo
+next-env.d.ts
+
+# local secrets — never committed
+.env*.local
+.vercel
+.env*

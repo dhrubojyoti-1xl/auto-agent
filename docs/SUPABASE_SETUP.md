@@ -18,12 +18,12 @@ Use the **pooler** — port `6543`, host containing `pooler.supabase.com`.
 
 ## 3. Apply the schema
 
-Either paste `web/supabase/schema.sql` then each file in
-`web/supabase/migrations/` (in filename order) into the Supabase SQL editor, or
+Either paste `supabase/schema.sql` then each file in
+`supabase/migrations/` (in filename order) into the Supabase SQL editor, or
 run both in one step from your machine:
 
 ```bash
-cd web && DATABASE_URL="<pooler string>" npm run seed
+DATABASE_URL="<pooler string>" npm run seed
 ```
 
 That applies the base schema, applies every migration in order, and seeds the
