@@ -125,6 +125,23 @@ Google OAuth setup and deployment are one-time administrator jobs:
 [docs/GOOGLE_OAUTH_SETUP.md](docs/GOOGLE_OAUTH_SETUP.md),
 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
+## Management views and charts
+
+`/management` gives Daily, Weekly and Monthly views with filters for department,
+employee and date range, and ten charts drawn as inline SVG in server
+components — no charting library, nothing to pay for, no client bundle:
+
+| | |
+|---|---|
+| Trends | task volume, completed vs backlog, completion-rate trend, backlog trend |
+| Departments | volume by department (stacked), completion rate by department, status donut |
+| People | employee activity — labelled *reported activity*, never "productivity" |
+| Attention | slow tasks by overrun, repeated-task groups by frequency |
+
+Every chart has tooltips, readable axes and an explicit empty state that says
+*why* it is empty — a single day cannot draw a trend, and slow-task analysis
+needs timestamps that most reports do not carry.
+
 ## Two front ends, one engine
 
 | | `apps-script/` | the repository root |

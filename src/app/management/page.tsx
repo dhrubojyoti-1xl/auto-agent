@@ -16,6 +16,9 @@ const TITLE: Record<Grain, string> = {
   daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly'
 };
 const WINDOW: Record<Grain, number> = { daily: 30, weekly: 84, monthly: 365 };
+// "daily".replace('ly','') gives "dai". Spell the nouns out.
+const PERIOD_NOUN: Record<Grain, string> = { daily: 'day', weekly: 'week', monthly: 'month' };
+const PERIOD_PLURAL: Record<Grain, string> = { daily: 'days', weekly: 'weeks', monthly: 'months' };
 
 function fmtPeriod(iso: string, grain: Grain) {
   const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -88,7 +91,7 @@ export default async function ManagementPage({
         <p className="sub">
           {department ? `${department} · ` : 'All departments · '}
           {employee ? `${employee} · ` : ''}
-          {hasData ? `${totals.total} tasks across ${series.length} ${grain === 'daily' ? 'days' : grain === 'weekly' ? 'weeks' : 'months'}`
+          {hasData ? `${totals.total} tasks across ${series.length} ${PERIOD_PLURAL[grain]}`
                    : 'No data in this range'}
         </p>
 
@@ -116,7 +119,7 @@ export default async function ManagementPage({
         ) : (
           <>
             <div className="kpis">
-              <Kpi label={`Tasks this ${grain.replace('ly', '')}`} value={latest?.total ?? 0}
+              <Kpi label={`Tasks this ${PERIOD_NOUN[grain]}`} value={latest?.total ?? 0}
                    note={previous ? `previous: ${previous.total}` : 'no prior period'} />
               <Kpi label="Completed" value={latest?.completed ?? 0}
                    note={`${latest?.completionRate ?? 0}% completion`} />
@@ -138,7 +141,7 @@ export default async function ManagementPage({
             <div className="chart-grid">
               <div className="chart-card">
                 <h3>Task volume</h3>
-                <p className="cap">How much work is being reported each {grain.replace('ly', '')}.</p>
+                <p className="cap">How much work is being reported each {PERIOD_NOUN[grain]}.</p>
                 <LineChart yLabel="Tasks" series={[{
                   name: 'Tasks',
                   points: series.map(p => ({ x: p.period, y: p.total }))
