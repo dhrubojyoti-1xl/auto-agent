@@ -1,7 +1,43 @@
 # Deploying the web app (Supabase + Vercel)
 
-Two account-level steps genuinely need you: creating the Supabase database and
-pasting two secrets into Vercel. Everything else is scripted.
+**Current deployment:** <https://auto-agent-reporting.vercel.app>
+(Vercel team `dgg3`, project `auto-agent-reporting`, Deployment Protection off,
+`APP_PASSWORD` / `SESSION_SECRET` / `INGEST_TOKEN` already set.)
+
+Only the database is outstanding. Two account-level steps genuinely need you,
+because each is a legal or credential action that must not be automated:
+accepting the marketplace terms (or pasting a connection string), and supplying
+an Anthropic key if you want AI commentary. Everything else is scripted.
+
+## The one-command finish
+
+Once `DATABASE_URL` exists in the Vercel production environment:
+
+```bash
+cd web && ./scripts/finish-deploy.sh
+```
+
+That pulls the environment, applies the schema, seeds the master data,
+redeploys, and runs the acceptance test.
+
+### Getting DATABASE_URL there — two routes
+
+**A. Vercel Marketplace (nothing to copy, no credential ever leaves Vercel)**
+
+1. Open <https://vercel.com/dgg3/~/integrations/accept-terms/supabase?source=cli>
+   and accept the marketplace terms. This is a legal agreement, which is why it
+   cannot be automated.
+2. Then run `npx vercel integration add supabase` — it provisions the database
+   and injects `DATABASE_URL` automatically.
+3. `cd web && ./scripts/finish-deploy.sh`
+
+**B. Existing Supabase project (paste one value)**
+
+1. Supabase → Project Settings → Database → **Connection pooling** → copy the
+   URI (port **6543**).
+2. Vercel → Settings → Environment Variables → add `DATABASE_URL` for
+   Production.
+3. `cd web && ./scripts/finish-deploy.sh`
 
 ---
 
