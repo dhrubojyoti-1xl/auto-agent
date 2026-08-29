@@ -17,6 +17,6 @@
 | [SUPABASE_SETUP.md](SUPABASE_SETUP.md) | database setup and schema |
 | [ATTACHMENT_FORMATS.md](ATTACHMENT_FORMATS.md) | what is parsed, and what genuinely is not |
 | [SECURITY.md](SECURITY.md) | identity, Gmail scope, tokens at rest, multi-user isolation |
-| [VERCEL_DEPLOYMENT.md](VERCEL_DEPLOYMENT.md) | deploying the web app to Supabase + Vercel |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | deploying the web app to Supabase + Vercel |
 
 Start with the root [README.md](../README.md).

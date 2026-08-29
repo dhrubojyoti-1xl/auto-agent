@@ -62,4 +62,4 @@ the ones it decided were not reports and why. The usual causes:
 The scheduled sync runs daily on a Vercel Hobby plan, hourly on Pro. **Sync now**
 is always available, and any external scheduler can drive
 `GET /api/cron/sync` with the `CRON_SECRET` bearer token. See
-[VERCEL_DEPLOYMENT.md](VERCEL_DEPLOYMENT.md).
+[DEPLOYMENT.md](DEPLOYMENT.md).

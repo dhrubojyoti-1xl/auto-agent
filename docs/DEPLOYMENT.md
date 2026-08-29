@@ -15,6 +15,48 @@ because each is a legal or credential action that must not be automated:
 accepting the marketplace terms (or pasting a connection string), and supplying
 an Anthropic key if you want AI commentary. Everything else is scripted.
 
+## Which project you deploy to
+
+`scripts/configure-production.sh` refuses to configure anything except the
+project named in `EXPECT_PROJECT` (default `auto-agent`). If you are signed in
+to a Vercel account that cannot see it, `vercel link` will happily offer a
+*different* project that account can see — which is how an earlier run
+configured the wrong one. The guard now removes the link and stops instead.
+
+```
+npx vercel logout && npx vercel login      # sign in as the project's owner
+./scripts/configure-production.sh
+```
+
+To deploy somewhere else deliberately:
+
+```bash
+EXPECT_PROJECT=<name> ./scripts/configure-production.sh
+```
+
+## Known failure: getaddrinfo ENOTFOUND base
+
+Fixed, but worth understanding because the symptom is baffling.
+
+`vercel env pull` writes the literal string `[SENSITIVE]` for variables Vercel
+marks Sensitive — it never exports their plaintext. Sourcing that file gave the
+seed step `DATABASE_URL="[SENSITIVE]"`. `pg-connection-string` cannot parse that
+as a URL, falls back to libpq keyword parsing, and returns `host: "base"`:
+
+```js
+require('pg-connection-string').parse('[SENSITIVE]')
+// -> { host: 'base', port: '', database: '[SENSITIVE]', user: '' }
+```
+
+Hence `getaddrinfo ENOTFOUND base`, with a database URL that looked correctly
+configured in the Vercel dashboard.
+
+The fix: the connection string is never round-tripped through `env pull`. It is
+built in the shell by `scripts/db-url.mjs build`, verified by
+`scripts/db-url.mjs verify` — which parses it, checks scheme/host/port/user/
+database, resolves DNS and **opens a real connection and runs a query** — and
+only then written to Vercel. A URL that cannot connect never reaches production.
+
 ## The one-command finish
 
 ```bash

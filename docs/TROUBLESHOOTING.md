@@ -168,6 +168,18 @@ log many identical rows per day. Raise it.
 
 ---
 
+## Deployment and database
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `getaddrinfo ENOTFOUND base` | `DATABASE_URL` is the literal `[SENSITIVE]`; `vercel env pull` redacts Sensitive variables and pg parses the placeholder into host `base` | never source a pulled secret; `scripts/configure-production.sh` builds and verifies the URL instead |
+| Deploy succeeds, every path returns 404 with `x-vercel-error: NOT_FOUND` | the Vercel project's Root Directory points somewhere with no framework | the app is at the repo root; clear Root Directory in Settings → General |
+| Every URL redirects to `vercel.com/sso-api` | Deployment Protection | Settings → Deployment Protection → Vercel Authentication → Disabled |
+| `Tenant or user not found` from the pooler | username must be `postgres.<project-ref>`, not `postgres`, on port 6543 | use `scripts/db-url.mjs build <ref> <pw> pooler <host>` |
+| `password authentication failed` | wrong or rotated database password | reset it in Supabase → Settings → Database, re-run the script |
+| Pooler host does not resolve | region-specific (`aws-0` vs `aws-1`) | copy the exact host from the Supabase Connect panel |
+| Script configured the wrong project | signed in to an account that cannot see the intended project | `npx vercel logout && npx vercel login`, then re-run |
+
 ## AI layer
 
 | Symptom | Cause / fix |

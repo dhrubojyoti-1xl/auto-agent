@@ -24,6 +24,10 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 
 SUPABASE_REF="${SUPABASE_REF:-njiwtuvwujooanyznyty}"
+# The intended production project. The script refuses to configure anything
+# else unless you override it, because an earlier run silently configured a
+# different project that happened to be visible to the signed-in account.
+EXPECT_PROJECT="${EXPECT_PROJECT:-auto-agent}"
 LOCAL_DB_FILE=".env.db.local"        # gitignored; lets re-runs skip the prompt
 
 say()  { printf "\n\033[1m==> %s\033[0m\n" "$1"; }
@@ -50,9 +54,17 @@ if [ ! -f .vercel/project.json ]; then
 fi
 PROJECT=$(python3 -c "import json;print(json.load(open('.vercel/project.json'))['projectName'])")
 ok "linked to: $PROJECT"
-if [ -n "${EXPECT_PROJECT:-}" ] && [ "$PROJECT" != "$EXPECT_PROJECT" ]; then
-  die "Linked to '$PROJECT' but EXPECT_PROJECT='$EXPECT_PROJECT'.
-Run 'rm -rf .vercel' and re-run, signing in as the account that owns it."
+if [ "$PROJECT" != "$EXPECT_PROJECT" ]; then
+  rm -rf .vercel
+  die "Linked to '$PROJECT', but the intended production project is '$EXPECT_PROJECT'.
+Nothing was configured and the link has been removed.
+
+If you are signed in to the wrong Vercel account:
+  npx vercel logout && npx vercel login     (sign in as the owner of $EXPECT_PROJECT)
+  ./scripts/configure-production.sh
+
+If '$PROJECT' really is the target, re-run with:
+  EXPECT_PROJECT=$PROJECT ./scripts/configure-production.sh"
 fi
 
 # ------------------------------------------------------------- 3. protection -

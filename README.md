@@ -123,7 +123,7 @@ another's mailbox data ([docs/SECURITY.md](docs/SECURITY.md)).
 
 Google OAuth setup and deployment are one-time administrator jobs:
 [docs/GOOGLE_OAUTH_SETUP.md](docs/GOOGLE_OAUTH_SETUP.md),
-[docs/VERCEL_DEPLOYMENT.md](docs/VERCEL_DEPLOYMENT.md).
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Two front ends, one engine
 
@@ -139,7 +139,7 @@ The web app is a **direct port**, and `tests/parity.test.ts` proves it by
 running both implementations over the same 14 fixtures and comparing every
 field of every record — including the duplicate fingerprint. Start with the
 Sheets version if cost matters most; add the web app for a nicer experience.
-See [docs/WEB_APP.md](docs/WEB_APP.md) and [docs/VERCEL_DEPLOYMENT.md](docs/VERCEL_DEPLOYMENT.md).
+See [docs/WEB_APP.md](docs/WEB_APP.md) and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ---
 

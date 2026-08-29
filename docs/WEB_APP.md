@@ -21,7 +21,7 @@ The manager never creates a label, a filter or a forward; never uploads or
 pastes a report; never runs a script or triggers a sync; never sees a database
 URL. Those are one-time administrator tasks
 ([GOOGLE_OAUTH_SETUP.md](GOOGLE_OAUTH_SETUP.md),
-[VERCEL_DEPLOYMENT.md](VERCEL_DEPLOYMENT.md)).
+[DEPLOYMENT.md](DEPLOYMENT.md)).
 
 This is a second front end over the **same tested engine** as the Apps Script
 system, which remains complete on its own.
