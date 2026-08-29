@@ -1,148 +1,182 @@
 #!/usr/bin/env bash
 # =============================================================================
-# ONE COMMAND to finish production.
+# Configure and deploy production.
 #
-#   cd ~/auto-agent && ./scripts/configure-production.sh
+#   ./scripts/configure-production.sh
 #
-# It links your Vercel project, turns off deployment protection, generates every
-# secret that can be generated, applies the database schema and migrations,
-# seeds master data, deploys, and runs the acceptance test.
+# Links your Vercel project, disables deployment protection, generates every
+# secret that can be generated, builds and VERIFIES the database connection,
+# applies schema + migrations, seeds, deploys, and runs the acceptance test.
 #
-# It will prompt you for exactly three values, which only you can provide.
-# Type them at the prompt — they go straight into Vercel and are never printed,
-# logged, or written to the repository:
+# It asks you for the Supabase database password (hidden input) and, if not yet
+# configured, the Google OAuth client id/secret. Nothing you type is printed,
+# logged, or committed.
 #
-#   Supabase database password   (the connection string is built for you)
-#   GOOGLE_CLIENT_ID             Google Cloud -> Credentials -> OAuth client (Web)
-#   GOOGLE_CLIENT_SECRET         same screen
-#
-# Safe to re-run: every step is idempotent and existing values are left alone.
+# WHY IT NO LONGER USES `vercel env pull` FOR THE DATABASE:
+#   Vercel marks these variables Sensitive and `env pull` writes the literal
+#   string [SENSITIVE] instead of the value. Sourcing that gave the seed step
+#   DATABASE_URL="[SENSITIVE]", which pg-connection-string parses via its libpq
+#   fallback into host "base" — the cause of `getaddrinfo ENOTFOUND base`.
+#   The URL is now held in this shell and verified against the real database
+#   BEFORE it is written anywhere.
 # =============================================================================
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-# Your Supabase project. Override with SUPABASE_REF=... if you use another.
 SUPABASE_REF="${SUPABASE_REF:-njiwtuvwujooanyznyty}"
+LOCAL_DB_FILE=".env.db.local"        # gitignored; lets re-runs skip the prompt
 
 say()  { printf "\n\033[1m==> %s\033[0m\n" "$1"; }
 ok()   { printf "    \033[32m%s\033[0m\n" "$1"; }
 warn() { printf "    \033[33m%s\033[0m\n" "$1"; }
 die()  { printf "\n\033[31m%s\033[0m\n\n" "$1"; exit 1; }
+sanitize() { sed -E 's|://([^:/@]+):[^@]*@|://\1:***@|g'; }
 
-say "1/8  Vercel account"
+# ---------------------------------------------------------------- 1. account -
+say "1/9  Vercel account"
 WHO=$(npx vercel whoami 2>/dev/null | tail -1)
 if [ -z "${WHO:-}" ]; then
-  warn "Not logged in. A browser window will open."
+  warn "Not signed in — a browser window will open."
   npx vercel login || die "vercel login failed."
   WHO=$(npx vercel whoami 2>/dev/null | tail -1)
 fi
 ok "signed in as $WHO"
 
-say "2/8  Linking the project"
+# ------------------------------------------------------------------- 2. link -
+say "2/9  Project"
 if [ ! -f .vercel/project.json ]; then
-  echo "    Pick the scope and project that owns https://vercel.com/babb2/auto-agent"
+  echo "    Choose the scope and project you want to deploy to."
   npx vercel link || die "vercel link failed."
 fi
 PROJECT=$(python3 -c "import json;print(json.load(open('.vercel/project.json'))['projectName'])")
-ok "project: $PROJECT"
+ok "linked to: $PROJECT"
+if [ -n "${EXPECT_PROJECT:-}" ] && [ "$PROJECT" != "$EXPECT_PROJECT" ]; then
+  die "Linked to '$PROJECT' but EXPECT_PROJECT='$EXPECT_PROJECT'.
+Run 'rm -rf .vercel' and re-run, signing in as the account that owns it."
+fi
 
-say "3/8  Making the site publicly reachable"
+# ------------------------------------------------------------- 3. protection -
+say "3/9  Public reachability"
 if npx vercel project protection disable --sso >/dev/null 2>&1; then
   ok "deployment protection: off"
 else
-  warn "could not change protection from the CLI"
-  warn "if the site redirects to vercel.com/sso-api, turn it off at:"
-  warn "  Project -> Settings -> Deployment Protection -> Vercel Authentication -> Disabled"
+  warn "could not change protection from the CLI. If the site redirects to"
+  warn "vercel.com/sso-api, turn it off at Settings -> Deployment Protection."
 fi
 
-say "4/8  Generating the secrets that can be generated"
+# ---------------------------------------------------------------- 4. secrets -
+say "4/9  Generated secrets"
 EXISTING=$(npx vercel env ls production 2>/dev/null || true)
-gen() { node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"; }
+has() { echo "$EXISTING" | grep -q "[[:space:]]$1[[:space:]]"; }
+gen()  { node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"; }
 for KEY in SESSION_SECRET TOKEN_ENCRYPTION_KEY CRON_SECRET INGEST_TOKEN; do
-  if echo "$EXISTING" | grep -q "\b$KEY\b"; then ok "$KEY already set"; else
-    printf "%s" "$(gen)" | npx vercel env add "$KEY" production --force >/dev/null 2>&1 \
-      && ok "$KEY generated"
-  fi
+  if has "$KEY"; then ok "$KEY already set"
+  else printf "%s" "$(gen)" | npx vercel env add "$KEY" production --force >/dev/null 2>&1 \
+         && ok "$KEY generated"; fi
 done
-if echo "$EXISTING" | grep -q "\bAPP_PASSWORD\b"; then ok "APP_PASSWORD already set"; else
+if has APP_PASSWORD; then ok "APP_PASSWORD already set"; else
   PW=$(node -e "
     const w=['harbour','lantern','copper','meadow','falcon','granite','willow','ember'];
     const r=()=>w[require('crypto').randomInt(w.length)];
     console.log([r(),r(),r()].join('-')+'-'+require('crypto').randomInt(1000,9999));")
   printf "%s" "$PW" | npx vercel env add APP_PASSWORD production --force >/dev/null 2>&1
   echo "$PW" > .app-password.txt && chmod 600 .app-password.txt
-  ok "APP_PASSWORD generated -> ./.app-password.txt (gitignored)"
+  ok "APP_PASSWORD generated -> ./.app-password.txt"
 fi
 
-say "5/8  The three values only you can supply"
-need() {
-  local KEY=$1 HINT=$2
-  if echo "$EXISTING" | grep -q "\b$KEY\b"; then ok "$KEY already set"; return; fi
-  echo
-  echo "    $KEY"
-  echo "    $HINT"
-  echo "    (typed here, sent straight to Vercel, never printed or stored locally)"
-  npx vercel env add "$KEY" production || warn "$KEY not set — re-run this script later"
-}
-# DATABASE_URL: rather than make you find and assemble a connection string,
-# build it from the project ref and ask only for the password, typed hidden.
-if echo "$EXISTING" | grep -q "\bDATABASE_URL\b"; then
-  ok "DATABASE_URL already set"
-else
-  echo
-  echo "    Supabase database password"
-  echo "    If you do not have it: https://supabase.com/dashboard/project/$SUPABASE_REF/settings/database"
-  echo "    -> Reset database password -> copy it (nothing is connected yet, so this is safe)"
-  echo
-  printf "    Paste the password (hidden): "
-  read -r -s DBPASS; echo
-  if [ -z "$DBPASS" ]; then
-    warn "no password entered — skipping. Re-run this script when you have it."
+# --------------------------------------------------------------- 5. database -
+say "5/9  Database connection"
+DBURL=""
+# Re-use a previously VERIFIED url if we stored one. Never trust `env pull`
+# here: Sensitive variables come back as the literal string [SENSITIVE].
+if [ -f "$LOCAL_DB_FILE" ]; then
+  DBURL=$(grep -m1 '^DATABASE_URL=' "$LOCAL_DB_FILE" | cut -d= -f2-)
+  if node scripts/db-url.mjs verify "$DBURL" >/dev/null 2>&1; then
+    ok "re-using the verified connection from $LOCAL_DB_FILE"
   else
-    ENC=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=''))" "$DBPASS")
-    echo
-    echo "    Which connection?"
-    echo "      1) Transaction pooler, port 6543  (recommended)"
-    echo "      2) Direct connection, port 5432   (fine for a demo)"
-    printf "    [1]: "
-    read -r CHOICE
-    if [ "${CHOICE:-1}" = "2" ]; then
-      DBURL="postgresql://postgres:${ENC}@db.${SUPABASE_REF}.supabase.co:5432/postgres"
-    else
-      printf "    Pooler host from the Connect panel [aws-0-ap-northeast-1.pooler.supabase.com]: "
-      read -r PHOST
-      PHOST=${PHOST:-aws-0-ap-northeast-1.pooler.supabase.com}
-      DBURL="postgresql://postgres.${SUPABASE_REF}:${ENC}@${PHOST}:6543/postgres"
-    fi
-    printf "%s" "$DBURL" | npx vercel env add DATABASE_URL production --force >/dev/null 2>&1 \
-      && ok "DATABASE_URL set (value not printed)"
-    unset DBPASS ENC DBURL
+    warn "stored connection no longer works — asking again"
+    DBURL=""
   fi
 fi
 
-need GOOGLE_CLIENT_ID   "Google Cloud -> APIs & Services -> Credentials -> OAuth client (Web application)"
-need GOOGLE_CLIENT_SECRET "same screen as the client ID"
+while [ -z "$DBURL" ]; do
+  echo
+  echo "    Supabase database password for project $SUPABASE_REF"
+  echo "    Don't have it? https://supabase.com/dashboard/project/$SUPABASE_REF/settings/database"
+  echo "    -> Reset database password (nothing is connected yet, so this is safe)"
+  echo
+  printf "    Password (hidden, never printed): "
+  read -r -s DBPASS; echo
+  [ -n "$DBPASS" ] || die "No password entered."
 
-say "6/8  Applying schema, migrations and master data"
-npx vercel env pull .env.production.local --environment=production --yes >/dev/null 2>&1
-set -a; . ./.env.production.local 2>/dev/null; set +a
-if [ -z "${DATABASE_URL:-}" ]; then
-  die "DATABASE_URL is still not set. Re-run this script and provide it at step 5."
+  echo
+  echo "      1) Transaction pooler, port 6543  (recommended)"
+  echo "      2) Direct connection, port 5432   (works, fine for a demo)"
+  printf "    Which? [2]: "
+  read -r CHOICE
+  if [ "${CHOICE:-2}" = "1" ]; then
+    echo
+    echo "    The pooler host is region-specific and shown in the Supabase"
+    echo "    Connect panel, e.g. aws-0-ap-south-1.pooler.supabase.com"
+    printf "    Pooler host: "
+    read -r PHOST
+    [ -n "$PHOST" ] || die "Pooler host required for option 1."
+    DBURL=$(node scripts/db-url.mjs build "$SUPABASE_REF" "$DBPASS" pooler "$PHOST") || die "Could not build the URL."
+  else
+    DBURL=$(node scripts/db-url.mjs build "$SUPABASE_REF" "$DBPASS" direct) || die "Could not build the URL."
+  fi
+  unset DBPASS
+
+  echo
+  echo "    Verifying before writing anything:"
+  if ! node scripts/db-url.mjs verify "$DBURL"; then
+    warn "That connection did not work. Nothing was written to Vercel."
+    DBURL=""
+    printf "    Try again? [Y/n]: "; read -r AGAIN
+    case "${AGAIN:-Y}" in [Nn]*) die "Stopped at your request.";; esac
+  fi
+done
+
+printf "DATABASE_URL=%s\n" "$DBURL" > "$LOCAL_DB_FILE" && chmod 600 "$LOCAL_DB_FILE"
+if has DATABASE_URL; then
+  npx vercel env rm DATABASE_URL production --yes >/dev/null 2>&1
 fi
-npm run seed || die "Seeding failed. Check that DATABASE_URL is the POOLER string (port 6543)."
+printf "%s" "$DBURL" | npx vercel env add DATABASE_URL production --force >/dev/null 2>&1 \
+  && ok "DATABASE_URL written to Vercel (verified working, value not printed)"
+
+# ----------------------------------------------------------------- 6. google -
+say "6/9  Google OAuth"
+CALLBACK="https://$(echo "${PRODUCTION_URL:-auto-agent-nu.vercel.app}" | sed 's|https\?://||')/api/auth/google/callback"
+for KEY in GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET; do
+  if has "$KEY"; then ok "$KEY already set (left untouched)"; else
+    echo
+    echo "    $KEY — Google Cloud -> APIs & Services -> Credentials"
+    echo "    Authorised redirect URI must be exactly:"
+    echo "      $CALLBACK"
+    echo "    (press Enter to skip; password sign-in still works)"
+    npx vercel env add "$KEY" production || warn "$KEY skipped"
+  fi
+done
+
+# ------------------------------------------------------- 7. schema and seed --
+say "7/9  Schema, migrations and master data"
+DATABASE_URL="$DBURL" npm run seed || die "Seeding failed."
 ok "database ready"
 
-say "7/8  Deploying"
-npx vercel --prod --yes >/dev/null || die "Deploy failed."
-URL=$(npx vercel inspect "$PROJECT" 2>&1 | grep -oE 'https://[a-z0-9.-]+\.vercel\.app' | head -1)
-ok "deployed: ${URL:-check the Vercel dashboard}"
+# ----------------------------------------------------------------- 8. deploy -
+say "8/9  Build and deploy"
+npm run build >/dev/null 2>&1 || die "Production build failed. Run 'npm run build' to see why."
+ok "build OK"
+DEPLOY_OUT=$(npx vercel --prod --yes 2>&1) || { echo "$DEPLOY_OUT" | tail -12 | sanitize; die "Deploy failed."; }
+URL=$(echo "$DEPLOY_OUT" | grep -oE 'https://[a-z0-9.-]+\.vercel\.app' | tail -1)
+ok "deployed: ${URL:-see the Vercel dashboard}"
 
-say "8/8  Verifying"
-./scripts/verify-production.sh "${URL:-https://auto-agent-nu.vercel.app}"
+# ----------------------------------------------------------------- 9. verify -
+say "9/9  Verifying production"
+./scripts/verify-production.sh "${URL:-https://$PROJECT.vercel.app}"
 
 echo
 echo "-----------------------------------------------------------"
-echo "  Open the URL above, click 'Continue with Google', approve"
-echo "  the read-only Gmail permission, and the assistant starts"
-echo "  collecting reports on its own."
+echo "  Open the URL above and click 'Continue with Google'."
+echo "  Team password (if you need it): ./.app-password.txt"
 echo "-----------------------------------------------------------"

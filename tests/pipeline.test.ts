@@ -176,3 +176,69 @@ describe('connection style detection', () => {
     expect(isDirectConnection('postgres://localhost/dev')).toBe(false);
   });
 });
+
+describe('DATABASE_URL construction and validation', () => {
+  // Regression: `vercel env pull` writes the literal string [SENSITIVE] for
+  // variables Vercel marks Sensitive. Sourcing that gave the seed step
+  // DATABASE_URL="[SENSITIVE]", which pg-connection-string parses through its
+  // libpq fallback into host "base" — the cause of ENOTFOUND base.
+  const run = async (args: string[]) => {
+    const { execFile } = await import('child_process');
+    const { promisify } = await import('util');
+    const { join } = await import('path');
+    try {
+      const { stdout } = await promisify(execFile)(
+        process.execPath, [join(__dirname, '..', 'scripts', 'db-url.mjs'), ...args]);
+      return { code: 0, out: stdout };
+    } catch (e) {
+      const err = e as { code?: number; stdout?: string; stderr?: string };
+      return { code: err.code ?? 1, out: (err.stdout || '') + (err.stderr || '') };
+    }
+  };
+
+  it('rejects the redacted [SENSITIVE] value instead of connecting to "base"', async () => {
+    const r = await run(['verify', '[SENSITIVE]']);
+    expect(r.code).not.toBe(0);
+    expect(r.out).toMatch(/not a parseable URL/i);
+  });
+
+  it('rejects a URL whose host is literally "base"', async () => {
+    const r = await run(['verify', 'postgresql://u:p@base:5432/postgres']);
+    expect(r.code).not.toBe(0);
+    expect(r.out).toMatch(/not a real host/i);
+  });
+
+  it('rejects an unsubstituted [YOUR-PASSWORD] placeholder', async () => {
+    const r = await run([
+      'verify', 'postgresql://postgres:[YOUR-PASSWORD]@db.ref.supabase.co:5432/postgres']);
+    expect(r.code).not.toBe(0);
+    expect(r.out).toMatch(/placeholder/i);
+  });
+
+  it('builds a pooler URL with the right user, port and encoded password', async () => {
+    const r = await run(['build', 'myref', 'p@ss:w/rd#1', 'pooler', 'aws-0-ap-south-1.pooler.supabase.com']);
+    expect(r.code).toBe(0);
+    const u = new URL(r.out.trim());
+    expect(u.protocol).toBe('postgresql:');
+    expect(u.username).toBe('postgres.myref');
+    expect(u.hostname).toBe('aws-0-ap-south-1.pooler.supabase.com');
+    expect(u.port).toBe('6543');
+    expect(u.pathname).toBe('/postgres');
+    // Decoded back to the original, so special characters survive intact.
+    expect(decodeURIComponent(u.password)).toBe('p@ss:w/rd#1');
+    expect(r.out).not.toContain('p@ss:w/rd#1');   // raw password never emitted
+  });
+
+  it('builds a direct URL with the plain postgres user on 5432', async () => {
+    const r = await run(['build', 'myref', 'secret', 'direct']);
+    const u = new URL(r.out.trim());
+    expect(u.username).toBe('postgres');
+    expect(u.hostname).toBe('db.myref.supabase.co');
+    expect(u.port).toBe('5432');
+  });
+
+  it('refuses to build from an empty or placeholder password', async () => {
+    expect((await run(['build', 'myref', '', 'direct'])).code).not.toBe(0);
+    expect((await run(['build', 'myref', '[SENSITIVE]', 'direct'])).code).not.toBe(0);
+  });
+});
