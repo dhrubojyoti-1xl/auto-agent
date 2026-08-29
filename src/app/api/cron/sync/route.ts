@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { generateReport } from '@/lib/reporting';
 import { syncAllAccounts } from '@/lib/sync';
 import { logEvent, query } from '@/lib/db';
@@ -22,10 +23,17 @@ export const maxDuration = 300;
  * the internet from driving the mailbox reader.
  */
 function authorised(req: Request): boolean {
-  const secret = process.env.CRON_SECRET;
+  const secret = (process.env.CRON_SECRET || '').trim();
   if (!secret) return false;
-  const header = req.headers.get('authorization') || '';
-  return header === `Bearer ${secret}`;
+  const provided = (req.headers.get('authorization') || '')
+    .replace(/^Bearer\s+/i, '').trim();
+  if (!provided) return false;
+  // Constant-time compare over hashes, so neither the value nor its length
+  // leaks through timing. Trimmed because a secret pasted into a dashboard
+  // very often carries trailing whitespace.
+  const h = (s: string) => createHmac('sha256', 'cron').update(s).digest('hex');
+  const a = Buffer.from(h(provided)), b = Buffer.from(h(secret));
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 export async function GET(req: Request) {

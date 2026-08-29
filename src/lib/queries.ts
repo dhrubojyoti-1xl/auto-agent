@@ -157,3 +157,167 @@ export async function getLatestReport(ownerUserId: number) {
      order by generated_at desc limit 1`, [ownerUserId]);
   return rows[0] || null;
 }
+
+/* ==========================================================================
+ * Management analytics — every figure computed in SQL from the task table,
+ * so a chart and the report can never disagree.
+ * ======================================================================== */
+
+export type Grain = 'daily' | 'weekly' | 'monthly';
+
+const TRUNC: Record<Grain, string> = {
+  daily: 'day', weekly: 'week', monthly: 'month'
+};
+
+export interface PeriodPoint {
+  period: string; total: number; completed: number; pending: number;
+  inProgress: number; blocked: number; cancelled: number; notStarted: number;
+  completionRate: number; backlog: number; employees: number; departments: number;
+}
+
+/** Volume and status split per period, optionally filtered. */
+export async function getPeriodSeries(
+  ownerUserId: number, grain: Grain,
+  opts: { department?: string; employee?: string; from?: string; to?: string; limit?: number } = {}
+): Promise<PeriodPoint[]> {
+  const params: unknown[] = [ownerUserId];
+  const where = ['owner_user_id = $1'];
+  if (opts.department) { params.push(opts.department); where.push(`department = $${params.length}`); }
+  if (opts.employee) { params.push(opts.employee); where.push(`employee_name = $${params.length}`); }
+  if (opts.from) { params.push(opts.from); where.push(`task_date >= $${params.length}`); }
+  if (opts.to) { params.push(opts.to); where.push(`task_date <= $${params.length}`); }
+  params.push(opts.limit ?? 60);
+
+  const rows = await query<Record<string, string | number>>(
+    `select date_trunc('${TRUNC[grain]}', task_date)::date as period,
+            count(*)::int as total,
+            count(*) filter (where task_status = 'Completed')::int   as completed,
+            count(*) filter (where task_status = 'Pending')::int     as pending,
+            count(*) filter (where task_status = 'In Progress')::int as in_progress,
+            count(*) filter (where task_status = 'Blocked')::int     as blocked,
+            count(*) filter (where task_status = 'Cancelled')::int   as cancelled,
+            count(*) filter (where task_status = 'Not Started')::int as not_started,
+            coalesce(round(100.0 * count(*) filter (where task_status = 'Completed')
+                     / nullif(count(*),0), 1), 0) as completion_rate,
+            count(distinct employee_name)::int as employees,
+            count(distinct department)::int as departments
+     from tasks where ${where.join(' and ')}
+     group by 1 order by 1 desc limit $${params.length}`, params);
+
+  return rows.map(r => {
+    const total = Number(r.total), completed = Number(r.completed);
+    return {
+      period: String(r.period), total, completed,
+      pending: Number(r.pending), inProgress: Number(r.in_progress),
+      blocked: Number(r.blocked), cancelled: Number(r.cancelled),
+      notStarted: Number(r.not_started),
+      completionRate: Number(r.completion_rate),
+      // Backlog: everything reported that is neither finished nor abandoned.
+      backlog: total - completed - Number(r.cancelled),
+      employees: Number(r.employees), departments: Number(r.departments)
+    };
+  }).reverse();
+}
+
+/** Per-department totals for a window. */
+export async function getDepartmentBreakdown(
+  ownerUserId: number, opts: { from?: string; to?: string } = {}
+) {
+  const params: unknown[] = [ownerUserId];
+  const where = ['owner_user_id = $1'];
+  if (opts.from) { params.push(opts.from); where.push(`task_date >= $${params.length}`); }
+  if (opts.to) { params.push(opts.to); where.push(`task_date <= $${params.length}`); }
+  const rows = await query<Record<string, string | number>>(
+    `select coalesce(department,'Unknown') as department,
+            count(*)::int as total,
+            count(*) filter (where task_status = 'Completed')::int as completed,
+            count(*) filter (where task_status = 'Pending')::int as pending,
+            count(*) filter (where task_status = 'In Progress')::int as in_progress,
+            count(*) filter (where task_status = 'Blocked')::int as blocked,
+            coalesce(round(100.0 * count(*) filter (where task_status='Completed')
+                     / nullif(count(*),0),1),0) as completion_rate,
+            count(*) filter (where slow_task_flag = 'TRUE')::int as slow_tasks,
+            count(*) filter (where repeated_task_flag)::int as repeated_tasks,
+            count(distinct employee_name)::int as employees
+     from tasks where ${where.join(' and ')}
+     group by 1 order by total desc`, params);
+  return rows.map(r => ({
+    department: String(r.department), total: Number(r.total),
+    completed: Number(r.completed), pending: Number(r.pending),
+    inProgress: Number(r.in_progress), blocked: Number(r.blocked),
+    completionRate: Number(r.completion_rate), slowTasks: Number(r.slow_tasks),
+    repeatedTasks: Number(r.repeated_tasks), employees: Number(r.employees)
+  }));
+}
+
+export async function getStatusDistribution(
+  ownerUserId: number, opts: { department?: string; from?: string; to?: string } = {}
+) {
+  const params: unknown[] = [ownerUserId];
+  const where = ['owner_user_id = $1'];
+  if (opts.department) { params.push(opts.department); where.push(`department = $${params.length}`); }
+  if (opts.from) { params.push(opts.from); where.push(`task_date >= $${params.length}`); }
+  if (opts.to) { params.push(opts.to); where.push(`task_date <= $${params.length}`); }
+  const rows = await query<Record<string, string | number>>(
+    `select task_status as name, count(*)::int as value from tasks
+     where ${where.join(' and ')} group by 1 order by 2 desc`, params);
+  return rows.map(r => ({ name: String(r.name), value: Number(r.value) }));
+}
+
+export async function getEmployeeActivity(
+  ownerUserId: number, opts: { department?: string; from?: string; to?: string; limit?: number } = {}
+) {
+  const params: unknown[] = [ownerUserId];
+  const where = ['owner_user_id = $1'];
+  if (opts.department) { params.push(opts.department); where.push(`department = $${params.length}`); }
+  if (opts.from) { params.push(opts.from); where.push(`task_date >= $${params.length}`); }
+  if (opts.to) { params.push(opts.to); where.push(`task_date <= $${params.length}`); }
+  params.push(opts.limit ?? 12);
+  const rows = await query<Record<string, string | number>>(
+    `select employee_name as employee, max(department) as department,
+            count(*)::int as total,
+            count(*) filter (where task_status='Completed')::int as completed,
+            coalesce(round(100.0 * count(*) filter (where task_status='Completed')
+                     / nullif(count(*),0),1),0) as completion_rate,
+            count(distinct task_date)::int as days
+     from tasks where ${where.join(' and ')}
+     group by 1 order by total desc limit $${params.length}`, params);
+  return rows.map(r => ({
+    employee: String(r.employee), department: String(r.department ?? ''),
+    total: Number(r.total), completed: Number(r.completed),
+    completionRate: Number(r.completion_rate), days: Number(r.days)
+  }));
+}
+
+/** Distinct departments and employees, for filter drop-downs. */
+export async function getFilterOptions(ownerUserId: number) {
+  const [depts, emps, range] = await Promise.all([
+    query<{ d: string }>(
+      `select distinct coalesce(department,'Unknown') as d from tasks
+       where owner_user_id = $1 order by 1`, [ownerUserId]),
+    query<{ e: string }>(
+      `select distinct employee_name as e from tasks where owner_user_id = $1 order by 1`,
+      [ownerUserId]),
+    query<{ min_date: string | null; max_date: string | null }>(
+      `select min(task_date) as min_date, max(task_date) as max_date from tasks
+       where owner_user_id = $1`, [ownerUserId])
+  ]);
+  return {
+    departments: depts.map(r => r.d),
+    employees: emps.map(r => r.e),
+    minDate: range[0]?.min_date ? String(range[0].min_date) : null,
+    maxDate: range[0]?.max_date ? String(range[0].max_date) : null
+  };
+}
+
+/** Slow tasks and repeat groups, already scoped, for their charts. */
+export async function getSlowTaskChart(ownerUserId: number, limit = 10) {
+  const rows = await query<Record<string, string | number>>(
+    `select task, employee, variance_hours, expected_duration, actual_duration
+     from slow_tasks where owner_user_id = $1 limit $2`, [ownerUserId, limit]);
+  return rows.map(r => ({
+    task: String(r.task), employee: String(r.employee),
+    variance: Number(r.variance_hours), expected: Number(r.expected_duration),
+    actual: Number(r.actual_duration)
+  }));
+}

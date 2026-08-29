@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 
 const LINKS = [
   ['/', 'Overview'],
+  ['/management', 'Management'],
   ['/connect', 'Inbox'],
   ['/submit', 'Manual entry'],
   ['/repeats', 'Repeated tasks'],

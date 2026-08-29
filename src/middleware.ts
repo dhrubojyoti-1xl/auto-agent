@@ -12,8 +12,14 @@ import type { NextRequest } from 'next/server';
 // /api/auth/google is public because it IS the login: "Continue with Google"
 // must work for someone who has no session yet. Its callback validates the
 // state cookie and Google's response before issuing one.
+// These paths authenticate themselves and must bypass the session gate.
+//
+// /api/cron is the one that bites: Vercel Cron calls it with a bearer token and
+// no session cookie, so leaving it behind the session middleware silently
+// disables the entire scheduled sync — the automation the product exists for.
+// The route still verifies CRON_SECRET itself, so this is not a hole.
 const PUBLIC_PATHS = [
-  '/login', '/api/login', '/api/auth/google', '/api/ingest', '/api/health'
+  '/login', '/api/login', '/api/auth/google', '/api/cron', '/api/ingest', '/api/health'
 ];
 
 export function middleware(req: NextRequest) {

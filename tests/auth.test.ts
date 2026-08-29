@@ -86,8 +86,16 @@ describe('middleware public paths', () => {
     const paths = (match as RegExpMatchArray)[1]
       .split(',').map(s => s.trim().replace(/['"]/g, '')).filter(Boolean);
     expect(paths.sort()).toEqual([
-      '/api/auth/google', '/api/health', '/api/ingest', '/api/login', '/login'
+      '/api/auth/google', '/api/cron', '/api/health', '/api/ingest', '/api/login', '/login'
     ]);
+  });
+
+  it('/api/cron MUST be public, or Vercel Cron can never run the sync', () => {
+    // Regression: the scheduled sync silently 401'd in production for days
+    // because the session middleware ran before the route's bearer check.
+    const src = require('fs').readFileSync(
+      new URL('../src/middleware.ts', import.meta.url), 'utf8');
+    expect(src).toContain("'/api/cron'");
   });
 
   it('middleware lives inside src/, where Next.js will actually load it', async () => {
