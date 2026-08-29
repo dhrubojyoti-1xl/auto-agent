@@ -111,6 +111,10 @@ these for **Production** (and Preview if you want previews to work):
 | Name | Value | Required |
 |---|---|---|
 | `DATABASE_URL` | the pooler string from step 3 | yes |
+| `GOOGLE_CLIENT_ID` | Google Cloud OAuth client — see [GOOGLE_OAUTH_SETUP.md](GOOGLE_OAUTH_SETUP.md) | yes, for the inbox flow |
+| `GOOGLE_CLIENT_SECRET` | same | yes, for the inbox flow |
+| `TOKEN_ENCRYPTION_KEY` | 32+ random chars; encrypts stored refresh tokens | yes, for the inbox flow |
+| `CRON_SECRET` | 32+ random chars; authorises the scheduled sync | yes, for the inbox flow |
 | `APP_PASSWORD` | the password your team will type | yes |
 | `SESSION_SECRET` | 32+ random bytes, see below | yes |
 | `INGEST_TOKEN` | 16+ random bytes; needed only for the Gmail bridge | optional |
@@ -209,6 +213,24 @@ run **Test bridge connection**.
 The Google Sheets version in `apps-script/` has none of these caveats. Keeping
 both is deliberate: the Sheets version is the zero-cost guarantee, the web app
 is the nicer experience.
+
+## Cron frequency
+
+`vercel.json` ships a **daily** schedule (`0 3 * * *`) because Vercel Hobby
+rejects anything more frequent at deploy time:
+
+```
+Hobby accounts are limited to daily cron jobs. This cron expression
+(0 * * * *) would run more than once per day.
+```
+
+On **Pro**, copy `vercel.pro.json.example` over `vercel.json` for hourly
+collection. On **Hobby**, either use the **Sync now** button, or point any
+external scheduler at the endpoint:
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" https://<your-app>.vercel.app/api/cron/sync
+```
 
 ## Troubleshooting
 

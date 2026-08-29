@@ -24,9 +24,15 @@ echo "  $(echo "$HEALTH" | python3 -c 'import json,sys;print(json.load(sys.stdin
 
 echo
 echo "SECURITY — private APIs must reject anonymous callers"
-for p in preview commit rebuild report; do
+for p in preview commit rebuild report sync accounts/disconnect; do
   check "POST /api/$p" "401" "$(code -X POST "$URL/api/$p" -H 'content-type: application/json' -d '{}')"
 done
+check "GET /api/cron/sync without the secret" "401" "$(code "$URL/api/cron/sync")"
+check "GET /api/cron/sync with a wrong secret" "401" \
+  "$(code "$URL/api/cron/sync" -H 'authorization: Bearer wrong')"
+# Middleware answers 401 for every /api path rather than redirecting, which is
+# the right call for an API surface; the link is only rendered to signed-in users.
+check "GET /api/auth/google without a session" "401" "$(code "$URL/api/auth/google")"
 check "POST /api/ingest without a token" "401" \
   "$(code -X POST "$URL/api/ingest" -H 'content-type: application/json' -d '{"text":"x"}')"
 check "POST /api/login with a wrong password" "401" \
@@ -34,7 +40,7 @@ check "POST /api/login with a wrong password" "401" \
 
 echo
 echo "SECURITY — pages must redirect, not render"
-for p in "" quality repeats slow report submit; do
+for p in "" quality repeats slow report submit connect; do
   check "GET /$p redirects to login" "307" "$(code "$URL/$p")"
 done
 

@@ -1,0 +1,17 @@
+// Hourly collection. Copy over vercel.json ONLY on a Vercel Pro plan —
+// Hobby rejects the deploy outright:
+//   "Hobby accounts are limited to daily cron jobs."
+//
+// On Hobby, keep the daily schedule and get more frequent collection either
+// from the "Sync now" button or from any external scheduler calling
+//   GET https://<app>/api/cron/sync
+//   Authorization: Bearer $CRON_SECRET
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/sync",
+      "schedule": "0 * * * *"
+    }
+  ]
+}
