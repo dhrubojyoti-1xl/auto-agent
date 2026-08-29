@@ -1,8 +1,14 @@
 # Deploying the web app (Supabase + Vercel)
 
-**Current deployment:** <https://auto-agent-reporting.vercel.app>
-(Vercel team `dgg3`, project `auto-agent-reporting`, Deployment Protection off,
-`APP_PASSWORD` / `SESSION_SECRET` / `INGEST_TOKEN` already set.)
+**Note on which project.** The app must be deployed from a Vercel project
+pointed at this repository. Since the Next.js app now lives at the repository
+**root**, no Root Directory setting is needed — a project whose root is the repo
+root will detect Next.js and build correctly.
+
+A project building from the wrong directory deploys successfully and then
+returns `404 NOT_FOUND` on every path, with `x-vercel-error: NOT_FOUND` in the
+response headers. That symptom means "no framework was detected", not "the code
+is broken".
 
 Only the database is outstanding. Two account-level steps genuinely need you,
 because each is a legal or credential action that must not be automated:
@@ -11,7 +17,21 @@ an Anthropic key if you want AI commentary. Everything else is scripted.
 
 ## The one-command finish
 
-Once `DATABASE_URL` exists in the Vercel production environment:
+```bash
+cd ~/auto-agent && ./scripts/configure-production.sh
+```
+
+It signs you into Vercel if needed, links the project, disables deployment
+protection, generates `SESSION_SECRET`, `TOKEN_ENCRYPTION_KEY`, `CRON_SECRET`,
+`INGEST_TOKEN` and `APP_PASSWORD`, then prompts for the only three values it
+cannot generate — `DATABASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` —
+before applying the schema, seeding, deploying and running the acceptance test.
+
+Values you type at its prompts go straight to Vercel; they are never printed or
+written into the repository.
+
+If `DATABASE_URL` is already set and you only want to re-apply the schema and
+redeploy:
 
 ```bash
 ./scripts/finish-deploy.sh
