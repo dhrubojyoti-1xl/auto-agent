@@ -30,9 +30,10 @@ done
 check "GET /api/cron/sync without the secret" "401" "$(code "$URL/api/cron/sync")"
 check "GET /api/cron/sync with a wrong secret" "401" \
   "$(code "$URL/api/cron/sync" -H 'authorization: Bearer wrong')"
-# Middleware answers 401 for every /api path rather than redirecting, which is
-# the right call for an API surface; the link is only rendered to signed-in users.
-check "GET /api/auth/google without a session" "401" "$(code "$URL/api/auth/google")"
+# /api/auth/google is PUBLIC by design: it is the login. Anonymous callers get
+# a redirect — to Google when configured, to /login?error=not_configured when not.
+check "GET /api/auth/google is public (it is the login)" "307" \
+  "$(code "$URL/api/auth/google")"
 check "POST /api/ingest without a token" "401" \
   "$(code -X POST "$URL/api/ingest" -H 'content-type: application/json' -d '{"text":"x"}')"
 check "POST /api/login with a wrong password" "401" \
