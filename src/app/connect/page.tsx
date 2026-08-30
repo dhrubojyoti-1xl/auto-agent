@@ -168,8 +168,16 @@ export default async function ConnectPage({
               Reads each new message, any spreadsheet or CSV attached to it, and any
               Google Sheet it links to.
             </li>
-            <li>Decides whether it is a report by looking for Date / Employee / Task / Status
-                columns — no labels, no rules for you to maintain.</li>
+            <li>
+              Decides whether it is a report from what the columns mean, not from their
+              exact names &mdash; &ldquo;Work Done Today&rdquo;, &ldquo;Staff Member&rdquo;
+              and &ldquo;Current State&rdquo; are understood without anyone configuring
+              them. No labels, no template, no rules for you to maintain.
+            </li>
+            <li>
+              Keeps yesterday&rsquo;s work, today&rsquo;s work and tomorrow&rsquo;s plan
+              apart, so a plan never counts as something that was done.
+            </li>
             <li>Normalises statuses, names, dates and departments.</li>
             <li>Rejects rows it cannot trust, with a reason, instead of guessing.</li>
             <li>Refuses to import the same report twice, however often it is re-sent.</li>

@@ -39,6 +39,36 @@ fingerprinted: an unchanged period reuses the stored commentary instead of
 paying for an identical one. **Rewrite commentary** forces a fresh call when
 you want one.
 
+## What counts as a report
+
+Nothing about the format is fixed. A message becomes a report when its content
+says so, whatever the subject line, the file type, or the column names.
+
+| | |
+|---|---|
+| Read from | the email body, an attached spreadsheet or CSV/TSV, or a linked Google Sheet |
+| Formats | HTML tables, plain-text tables, XLSX, XLSM, CSV, TSV, Google Sheets |
+| Subjects | irrelevant &mdash; "FYI", "Monday", "Fwd: Hi" and no subject all work |
+| Column names | read for meaning: "Work Done Today", "Staff Member", "Current State", "Reporting Dt", "Emp Nm", and the same words in Spanish, German or French |
+| Column order | irrelevant |
+| Structure | title rows, two-row headers, blank rows, summary rows and several tables in one message are all handled |
+| Employees | from an employee column, or from the sender when the report has none |
+| Departments | from a column, the sender's domain, or the employee roster &mdash; never guessed into a default |
+| Work streams | yesterday's work, today's work and tomorrow's plan are kept apart; plans never count as work done |
+
+Every message ends with one of four outcomes, visible on **Data quality**:
+
+| Outcome | Meaning |
+|---|---|
+| Processed | became tasks |
+| Not a report | read, judged, and finished with &mdash; a newsletter, an invoice, an unrelated spreadsheet |
+| Format not readable | a PDF or Word document; send a spreadsheet, a table in the email, or a Google Sheet link |
+| Needs a look | something here is a report and could not be read &mdash; a screenshot, an unshared sheet, a corrupt file |
+
+Nothing is skipped in silence. A screenshot of a table is *not* read
+automatically: guessing figures from pixels is how wrong numbers enter a
+management report, so it asks for the underlying file instead.
+
 ## Reports that arrive as a link
 
 A department that keeps its report in a Google Sheet pastes the link rather

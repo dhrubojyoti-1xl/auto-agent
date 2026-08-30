@@ -67,7 +67,11 @@ export async function generateReport(
   opts: { force?: boolean } = {}
 ): Promise<GeneratedReport> {
   const cfg = engineConfig();
-  const tasks = await loadTasks(ownerUserId);
+  // Plans are excluded here for the same reason they are excluded from the
+  // dashboard: the management summary is about work that happened. Counting
+  // tomorrow's intentions as today's output is the one error that would make
+  // every figure in the report overstate the team.
+  const tasks = (await loadTasks(ownerUserId)).filter(t => t.workKind !== 'PLANNED');
   const anchor = anchorDate ||
     (tasks.length ? tasks.map(t => t.date).sort().slice(-1)[0] : new Date().toISOString().slice(0, 10));
   const { start, end } = periodFor(type, anchor, cfg.weekStart);
