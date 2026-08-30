@@ -440,9 +440,16 @@ export function ingestDocument(
         /(\d{1,2}[\s\-/.][A-Za-z]{3,9}[\s\-/.,]+\d{2,4}|\d{4}-\d{2}-\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})/
       )?.[1], cfg.dateOrder) || doc.receivedAt.slice(0, 10));
 
-  const deptCounts = new Map<string, number>();
-  accepted.forEach(r => deptCounts.set(r.department, (deptCounts.get(r.department) || 0) + 1));
-  const department = [...deptCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || departmentHint || '';
+  // The report's department, set only when every row agrees.
+  //
+  // Taking the most common one labelled a five-department report with
+  // whichever team happened to have the most rows, and the other four
+  // disappeared from the report's own description. The rows always carried
+  // their own department correctly; it was the summary that lied.
+  const departments = [...new Set(accepted.map(r => r.department).filter(Boolean))].sort();
+  const department = departments.length === 1
+    ? departments[0]
+    : departments.length === 0 ? (departmentHint || '') : '';
 
   const status: IngestResult['status'] =
     rejected.length > 0 ? 'PARTIAL'
@@ -450,7 +457,7 @@ export function ingestDocument(
       : 'SUCCESS';
 
   return {
-    reportId, status, department, reportDate,
+    reportId, status, department, departments, reportDate,
     tablesFound: reportTables.length, rowsExtracted,
     accepted, rejected, skippedIdempotent,
     newEmployees: createdEmployees,

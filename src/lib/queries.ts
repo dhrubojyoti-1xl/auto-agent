@@ -427,7 +427,9 @@ export async function getMessageOutcomes(ownerUserId: number, limit = 50) {
     classification: String(r.classification),
     evidence: String(r.evidence ?? ''),
     rejected: Number(r.rows_rejected ?? 0),
-    attachment: String(r.attachment_name ?? '')
+    attachment: String(r.attachment_name ?? ''),
+    departmentsCount: Number(r.departments_count ?? 0),
+    departmentsList: String(r.departments_list ?? '')
   }));
 }
 
@@ -489,7 +491,7 @@ export async function getInboxMessages(ownerUserId: number, limit = 15) {
     `select subject, sender, received_at, processing_status,
             coalesce(classification, 'NON_REPORT') as classification,
             confidence, evidence, department, rows_extracted, rows_inserted,
-            rows_rejected, attachment_name
+            rows_rejected, attachment_name, departments_count, departments_list
      from documents where owner_user_id = $1
      -- Reports and unfinished business first, newsletters last. Strict
      -- chronological order buries the one report of the day under whatever
@@ -515,6 +517,8 @@ export async function getInboxMessages(ownerUserId: number, limit = 15) {
     extracted: Number(r.rows_extracted ?? 0),
     imported: Number(r.rows_inserted ?? 0),
     rejected: Number(r.rows_rejected ?? 0),
-    attachment: String(r.attachment_name ?? '')
+    attachment: String(r.attachment_name ?? ''),
+    departmentsCount: Number(r.departments_count ?? 0),
+    departmentsList: String(r.departments_list ?? '')
   }));
 }

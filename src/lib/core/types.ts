@@ -196,6 +196,11 @@ export interface SourceDocument {
 }
 
 export interface IngestResult {
+  /**
+   * Every department the accepted rows belong to. One report may span several;
+   * `department` is set only when they all agree.
+   */
+  departments?: string[];
   reportId: string;
   status: 'SUCCESS' | 'PARTIAL' | 'NO_DATA';
   department: string;

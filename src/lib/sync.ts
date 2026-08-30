@@ -148,7 +148,8 @@ export async function syncAccount(account: GmailAccount, trigger: string): Promi
 
           await upsertGmailDocument(account.id, owner, msg, doc, result.reportId,
             result.status, result.tablesFound, result.rowsExtracted, 0,
-            result.skippedIdempotent, result.rejected.length);
+            result.skippedIdempotent, result.rejected.length,
+            0.9, '', result.departments || []);
 
           const written = await insertTasks(result.accepted, owner);
           if (result.rejected.length) {
@@ -160,7 +161,8 @@ export async function syncAccount(account: GmailAccount, trigger: string): Promi
           }
           await upsertGmailDocument(account.id, owner, msg, doc, result.reportId,
             result.status, result.tablesFound, result.rowsExtracted, written,
-            result.skippedIdempotent, result.rejected.length);
+            result.skippedIdempotent, result.rejected.length,
+            0.9, '', result.departments || []);
 
           summary.rowsImported += written;
           summary.rowsRejected += result.rejected.length;
@@ -472,21 +474,23 @@ async function upsertGmailDocument(
   accountId: number, ownerUserId: number, msg: GmailMessage, doc: SourceDocument,
   reportId: string, status: string, tablesFound: number, rowsExtracted: number,
   rowsInserted: number, rowsSkipped: number, rowsRejected: number,
-  confidence = 0.9, evidence = ''
+  confidence = 0.9, evidence = '', departments: string[] = []
 ): Promise<void> {
   await query(
     `insert into documents (report_id, document_id, source, subject, sender, sender_domain,
        received_at, processing_status, tables_found, rows_extracted, rows_inserted,
        rows_skipped_idempotent, rows_rejected, gmail_account_id, gmail_message_id,
        attachment_name, owner_user_id, detector_version, classification, confidence,
-       evidence, processed_at)
+       evidence, departments_count, departments_list, processed_at)
      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-             $21, now())
+             $21,$22,$23, now())
      on conflict (owner_user_id, report_id) do update set
        processing_status = excluded.processing_status,
        classification = excluded.classification,
        confidence = excluded.confidence,
        detector_version = excluded.detector_version,
+       departments_count = excluded.departments_count,
+       departments_list = excluded.departments_list,
        tables_found = excluded.tables_found,
        rows_extracted = excluded.rows_extracted,
        rows_inserted = greatest(documents.rows_inserted, excluded.rows_inserted),
@@ -503,7 +507,9 @@ async function upsertGmailDocument(
      rowsInserted > 0 ? 'DEPARTMENTAL_REPORT'
        : rowsRejected > 0 ? 'REVIEW_REQUIRED' : 'POSSIBLE_REPORT',
      confidence,
-     evidence.slice(0, 500)]
+     evidence.slice(0, 500),
+     departments.length,
+     departments.length ? departments.join(', ').slice(0, 300) : null]
   );
 }
 

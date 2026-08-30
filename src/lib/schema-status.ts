@@ -21,7 +21,8 @@ const REQUIRED_COLUMNS: [table: string, column: string][] = [
   ['employees', 'auto_created'],
   ['documents', 'detector_version'],
   ['documents', 'classification'],
-  ['tasks', 'work_kind']
+  ['tasks', 'work_kind'],
+  ['documents', 'departments_count']
 ];
 
 const REQUIRED_VIEWS = [

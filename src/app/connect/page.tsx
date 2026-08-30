@@ -222,6 +222,13 @@ export default async function ConnectPage({
                       {kind === 'report' && (
                         <span> · imported <strong>{m.imported}</strong> of {m.extracted} row(s)
                           {m.rejected > 0 && <> · {m.rejected} rejected</>}
+                          {/* One report may legitimately cover several teams.
+                              Naming the span beats picking a winner. */}
+                          {m.departmentsCount > 1 && (
+                            <> · across <strong>{m.departmentsCount}</strong> departments
+                              ({m.departmentsList})</>
+                          )}
+                          {m.departmentsCount === 1 && <> · {m.departmentsList}</>}
                         </span>
                       )}
                       {kind !== 'report' && m.evidence && <span> · {m.evidence.slice(0, 140)}</span>}

@@ -102,3 +102,54 @@ d('Case B reconciles', () => {
     expect(kpis.employeesReporting).toBe(5);
   });
 });
+
+describe('one report, five departments', () => {
+  it('does not label the report with whichever team had most rows', async () => {
+    const { ingestDocument } = await import('../src/lib/core/ingest');
+    const { extractPipeTables } = await import('../src/lib/core/html-table');
+    const { seedMasters } = await import('../src/lib/seed');
+    const { engineConfig } = await import('../src/lib/pipeline');
+
+    // Case B's shape: five departments, two rows for one of them.
+    const tables = extractPipeTables(
+      'Date|Staff Member|Team / Division|Work Item|Current Status\n' +
+      '30 Aug 2026|Ann Fielding|AI & Technology|AI integration|Completed\n' +
+      '30 Aug 2026|Ann Fielding|AI & Technology|Dashboard work|Completed\n' +
+      '30 Aug 2026|Ben Okoro|Sales|Client follow-up|Completed\n' +
+      '30 Aug 2026|Cara Duval|HR|Employee onboarding|In Progress\n' +
+      '30 Aug 2026|Dee Marsh|Operations|Vendor reconciliation|Pending\n' +
+      '30 Aug 2026|Eve Lantry|Marketing|Campaign review|Completed\n');
+
+    const res = ingestDocument({
+      documentId: 'five-depts', subject: 'daily', sender: 'lead@co.com',
+      receivedAt: '2026-08-30T09:00:00.000Z', tables
+    }, seedMasters([]), engineConfig(), new Map());
+
+    expect(res.accepted).toHaveLength(6);
+    // The report has no single department, and says so rather than picking one.
+    expect(res.department).toBe('');
+    expect(res.departments?.sort()).toEqual(
+      ['AI & Technology', 'HR', 'Marketing', 'Operations', 'Sales']);
+    // Every row still carries its own.
+    expect(new Set(res.accepted.map(a => a.department)).size).toBe(5);
+  });
+
+  it('names the department when every row agrees', async () => {
+    const { ingestDocument } = await import('../src/lib/core/ingest');
+    const { extractPipeTables } = await import('../src/lib/core/html-table');
+    const { seedMasters } = await import('../src/lib/seed');
+    const { engineConfig } = await import('../src/lib/pipeline');
+
+    const tables = extractPipeTables(
+      'Date|Employee|Dept|Task|Status\n' +
+      '30 Aug 2026|Ann Fielding|Sales|Call a client|Completed\n' +
+      '30 Aug 2026|Ben Okoro|Sales|Send the quote|Completed\n');
+    const res = ingestDocument({
+      documentId: 'one-dept', subject: 'daily', sender: 'lead@co.com',
+      receivedAt: '2026-08-30T09:00:00.000Z', tables
+    }, seedMasters([]), engineConfig(), new Map());
+
+    expect(res.department).toBe('Sales');
+    expect(res.departments).toEqual(['Sales']);
+  });
+});
