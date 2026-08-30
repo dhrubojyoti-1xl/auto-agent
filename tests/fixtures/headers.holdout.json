@@ -1,0 +1,23 @@
+{
+  "_comment": "Held-out header wordings. NONE of these strings may appear anywhere under src/. The build fails if one does — a mapper that recognises these because somebody pasted them into a list has not generalised, it has memorised.",
+  "employee": [
+    "Resource", "Staff Member", "Assigned To", "Emp Nm", "Person",
+    "Owner", "Team Member", "Handled By", "Reported By", "Executed By"
+  ],
+  "task": [
+    "Work Item", "Deliverable", "Activity Performed", "Job Description",
+    "Assignment Details", "Work Package", "Action Taken", "Piece of Work"
+  ],
+  "status": [
+    "Current Status", "Present State", "Work State", "Stage Reached",
+    "Progress Status", "Completion State", "Where It Stands", "Situation"
+  ],
+  "date": [
+    "Reporting Dt", "Work Date", "Activity Date", "Report Date",
+    "Day", "Dated", "Log Date", "Entry Date"
+  ],
+  "department": [
+    "Team / Division", "Business Unit", "Division", "Dept", "Function",
+    "Vertical", "Section", "Group"
+  ]
+}

@@ -28,11 +28,26 @@ export interface Table {
   /** Worksheet name, when the table came from a workbook. Evidence for the department. */
   sheetName?: string;
 }
+/**
+ * How one column came to be mapped, kept so a decision can be explained and
+ * audited rather than merely trusted.
+ */
+export interface ColumnDecision {
+  column: number;
+  header: string;
+  field: Field;
+  confidence: number;
+  evidence: string;
+  source: 'alias' | 'header semantics' | 'values';
+}
+
 export interface HeaderMap {
   headerRowIndex: number;
   mapping: Partial<Record<Field, number>>;
   matches: number;
   partialHeader?: boolean;
+  /** Columns resolved from their contents rather than their heading. */
+  decisions?: ColumnDecision[];
 }
 
 export interface Employee {

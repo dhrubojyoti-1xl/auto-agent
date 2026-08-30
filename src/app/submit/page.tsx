@@ -46,7 +46,7 @@ export default function SubmitPage() {
           <label htmlFor="content">Report content</label>
           <textarea id="content" value={content} placeholder={
             'Date | Employee | Task | Status | Link\n' +
-            '29 Aug 2026 | Rahul Mehta | Update CRM | Completed | https://…'
+            '29 Aug 2026 | A. Lovelace | Update CRM | Completed | https://…'
           } onChange={e => { setContent(e.target.value); setPreview(null); setCommitted(null); }} />
           <div className="row" style={{ marginTop: '.9rem' }}>
             <button disabled={busy || !content.trim()}

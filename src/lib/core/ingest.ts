@@ -359,7 +359,7 @@ export function ingestDocument(
   const dateEvidence = inferReportDate(
     { subject: doc.subject, body: doc.contextText, receivedAt: doc.receivedAt }, cfg);
 
-  // The sender as a person: "Dhrubo Ganguly <d@x.com>" -> "Dhrubo Ganguly",
+  // The sender as a person: "Ada Lovelace <a@x.com>" -> "Ada Lovelace",
   // and a bare address falls back to its local part.
   const senderName = senderDisplayName(doc.sender);
 
@@ -463,8 +463,8 @@ export function ingestDocument(
 /**
  * The human name behind a From header.
  *
- * "Dhrubo Ganguly <gangulydhrubo@gmail.com>" -> "Dhrubo Ganguly"
- * "gangulydhrubo@gmail.com"                  -> "Gangulydhrubo"
+ * "Ada Lovelace <ada@example.com>" -> "Ada Lovelace"
+ * "ada.lovelace@example.com"                 -> "Ada Lovelace"
  *
  * The address is only used when there is no display name, and the local part
  * is title-cased rather than left as an address, because it becomes an

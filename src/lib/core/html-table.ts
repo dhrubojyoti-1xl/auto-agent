@@ -6,8 +6,23 @@
  * missing closing tags, uppercase tags, multiple report tables in one message,
  * blank rows, and plain-text "a | b | c" tables when there is no HTML at all.
  */
-import type { Cell, EngineConfig, Field, HeaderMap, Masters, Table } from './types';
+import type {
+  Cell, ColumnDecision, EngineConfig, Field, HeaderMap, Masters, Table
+} from './types';
+import { confirmWeakHeader, fieldFromValues, VALUE_CONFIDENCE_FLOOR } from './column-values';
 import { cleanWhitespace, decodeEntities, normalizeHeader } from './normalize';
+import { rankHeader } from './semantic-headers';
+
+/**
+ * The field a heading leans towards without reaching the bar to decide on its
+ * own — one clear front-runner, too weak to act on unaided.
+ */
+function weakFieldFor(header: string): Field | null {
+  const [best, second] = rankHeader(header);
+  if (!best || best.score >= 3) return null;          // decided already, or nothing
+  if (second && second.score === best.score) return null;  // a tie is not a lean
+  return best.field;
+}
 
 const REQUIRED: Field[] = ['date', 'employee', 'task', 'status'];
 
@@ -188,6 +203,53 @@ function mapOneRow(
   return { mapping, matches };
 }
 
+/**
+ * A second pass over the columns whose headings said nothing, deciding from
+ * the values underneath them.
+ *
+ * This is what stops the mapper depending on somebody having anticipated a
+ * wording. "What Was Done Today" scores two weak words and maps to nothing;
+ * the column beneath it is free text that rarely repeats, which is a task
+ * column whatever it is called.
+ *
+ * Only fields the header pass failed to fill are considered, so an explicit
+ * heading always wins, and a column that convinces nothing is left alone.
+ */
+function fillFromValues(
+  rows: Cell[][], headerRowIndex: number, mapping: Partial<Record<Field, number>>,
+  masters: Masters, cfg: EngineConfig
+): { mapping: Partial<Record<Field, number>>; added: ColumnDecision[] } {
+  const out = { ...mapping };
+  const added: ColumnDecision[] = [];
+  const taken = new Set(Object.values(out));
+  const width = Math.max(...rows.slice(headerRowIndex).map(r => r.length), 0);
+  const body = rows.slice(headerRowIndex + 1);
+  if (body.length < 3) return { mapping: out, added };
+
+  for (let c = 0; c < width; c++) {
+    if (taken.has(c)) continue;
+    const column = body.map(r => r[c]?.text ?? '');
+    const header = rows[headerRowIndex]?.[c]?.text ?? '';
+
+    // The heading proposes where it can, and the values decide.
+    const weak = weakFieldFor(header);
+    const guess = (weak && confirmWeakHeader(weak, column, masters, cfg)) ||
+                  fieldFromValues(column, masters, cfg);
+
+    if (!guess || guess.confidence < VALUE_CONFIDENCE_FLOOR) continue;
+    if (guess.field in out) continue;
+    out[guess.field] = c;
+    taken.add(c);
+    added.push({
+      column: c, field: guess.field, confidence: guess.confidence,
+      evidence: guess.evidence,
+      source: weak && guess.field === weak ? 'header semantics' : 'values',
+      header
+    });
+  }
+  return { mapping: out, added };
+}
+
 export function mapHeaderRow(rows: Cell[][], masters: Masters, cfg: EngineConfig): HeaderMap | null {
   const scanLimit = Math.min(rows.length, 6);
 
@@ -195,7 +257,28 @@ export function mapHeaderRow(rows: Cell[][], masters: Masters, cfg: EngineConfig
     const { mapping, matches } = mapOneRow(rows[r], masters);
     const hasRequired = REQUIRED.every(f => f in mapping);
     if (matches >= cfg.minHeaderMatches && hasRequired) {
-      return { headerRowIndex: r, mapping, matches };
+      // The required fields are settled, but a column the headings did not
+      // name may still be a department, a link or a duration. Dropping it
+      // because four other columns happened to be enough loses real data.
+      const extra = fillFromValues(rows, r, mapping, masters, cfg);
+      return {
+        headerRowIndex: r, mapping: extra.mapping,
+        matches: matches + extra.added.length,
+        decisions: extra.added.length ? extra.added : undefined
+      };
+    }
+    // The headings alone were not enough. Before giving up on this row, let
+    // the columns speak for themselves.
+    const filled = fillFromValues(rows, r, mapping, masters, cfg);
+    if (filled.added.length) {
+      const nowHasRequired = REQUIRED.every(f => f in filled.mapping);
+      const total = matches + filled.added.length;
+      if (nowHasRequired && total >= cfg.minHeaderMatches) {
+        return {
+          headerRowIndex: r, mapping: filled.mapping, matches: total,
+          decisions: filled.added
+        };
+      }
     }
   }
 

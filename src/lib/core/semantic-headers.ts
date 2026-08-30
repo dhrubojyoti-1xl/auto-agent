@@ -2,8 +2,8 @@
  * Understanding a column heading nobody told us about.
  *
  * The alias table handles the wordings we have seen. Real departments invent
- * new ones constantly — "Work Done Today", "Activities Completed", "Emp Nm",
- * "Current State", "Reporting Dt" — and a fixed list can only ever be the
+ * new ones constantly — abbreviated, phrased as verbs, or borrowed from
+ * whatever the team calls the work — and a fixed list can only ever hold the
  * headings somebody already thought of. Before this, an unknown heading meant
  * the column was dropped, and dropping the wrong one meant the whole table
  * failed to look like a report.
@@ -37,7 +37,8 @@ const SIGNALS: Record<string, { strong: string[]; weak: string[]; against?: stri
     // "Who" is a whole column heading on its own in plenty of real reports,
     // and it can only mean one thing.
     strong: ['employee', 'emp', 'staff', 'person', 'member', 'worker', 'assignee',
-             'who', 'resource', 'nombre', 'empleado', 'mitarbeiter', 'karmachari'],
+             'assign', 'who', 'resource', 'nombre', 'empleado', 'mitarbeiter',
+             'karmachari'],
     weak: ['name', 'nm', 'by', 'owner', 'assigned', 'team'],
     against: ['task', 'project', 'file', 'department', 'client', 'company', 'sheet']
   },
@@ -62,7 +63,7 @@ const SIGNALS: Record<string, { strong: string[]; weak: string[]; against?: stri
   status: {
     strong: ['status', 'state', 'progress', 'stage', 'situation', 'stand',
              'estado', 'zustand'],
-    // "Where it stands" is a heading a person writes; "stand" carries it.
+    // A heading phrased as a question about state still names the state.
     weak: ['completion', 'current', 'result', 'outcome', 'condition', 'position',
            'where'],
     against: ['date', 'time', 'report', 'update', 'note']
@@ -91,8 +92,8 @@ const SIGNALS: Record<string, { strong: string[]; weak: string[]; against?: stri
     against: ['actual', 'spent', 'taken']
   },
   actualDuration: {
-    strong: ['actual', 'spent', 'taken', 'logged'],
-    weak: ['duration', 'hour', 'hr', 'effort', 'time'],
+    strong: ['actual', 'spent', 'logged'],
+    weak: ['duration', 'hour', 'hr', 'effort', 'time', 'taken'],
     against: ['estimate', 'expected', 'planned']
   },
   link: {
@@ -117,7 +118,7 @@ const STOP = new Set(['the', 'of', 'for', 'a', 'an', 'and', 'in', 'is', 'as', 'p
 /**
  * Words that mean the column belongs to a different kind of document
  * entirely. An invoice and a report can share a word — "unit" appears in
- * "Business Unit" and in "Unit Price" — so one of these anywhere in a heading
+ * a compound organisational heading and in "Unit Price" — so one of these anywhere in a heading
  * vetoes the whole heading rather than merely lowering a score.
  */
 const NOT_A_REPORT_FIELD = new Set([
@@ -131,6 +132,25 @@ const NOT_A_REPORT_FIELD = new Set([
  * here as "employees", and an unmatched "employees" is how a whole column
  * silently stops being an employee column.
  */
+/**
+ * Verb and participle endings, so a heading written as an action reaches the
+ * same place as one written as a noun: "Dated" is a date column, "Handled" and
+ * "Assigned" are employee columns, "Reporting" is a report.
+ *
+ * Applied after plural reduction, and only to words long enough that the stem
+ * is still a word.
+ */
+function deinflect(t: string): string {
+  for (const [suffix, min] of [['ing', 6], ['ed', 5]] as const) {
+    if (t.endsWith(suffix) && t.length >= min) {
+      const base = t.slice(0, -suffix.length);
+      // "dated" -> "date": restore the e that the suffix swallowed.
+      return base.length >= 3 ? base : t;
+    }
+  }
+  return t;
+}
+
 function singular(t: string): string {
   // Words that merely end in s: status, progress, previous, analysis. Stripping
   // the s turns them into nothing anything matches, which is how a Status
@@ -151,7 +171,13 @@ export function headerTokens(raw: string): string[] {
     .trim()
     .split(/\s+/)
     .filter(t => t && !STOP.has(t))
-    .map(singular);
+    .map(singular)
+    .flatMap(t => {
+      const stem = deinflect(t);
+      // Both forms are offered, so "dated" matches "date" and "dat" alike
+      // without losing a word that was already a noun.
+      return stem === t ? [t] : [t, stem, stem + 'e'];
+    });
 }
 
 export interface HeaderGuess {

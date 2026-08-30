@@ -6,7 +6,6 @@
  * each. `web/tests/parity.test.ts` asserts that automatically.
  */
 import type { Category, Department, Employee, Field, Masters } from './core/types';
-
 export const STATUS_ALIASES: Record<string, string> = {
   'completed': 'Completed', 'complete': 'Completed', 'done': 'Completed',
   'finished': 'Completed', 'closed': 'Completed', 'delivered': 'Completed',
@@ -28,7 +27,6 @@ export const STATUS_ALIASES: Record<string, string> = {
   'cancelled': 'Cancelled', 'canceled': 'Cancelled', 'dropped': 'Cancelled',
   'not required': 'Cancelled', 'na': 'Cancelled', 'n/a': 'Cancelled'
 };
-
 /** Apps Script field names -> the web engine's camelCase field names. */
 export const GAS_FIELD_TO_WEB: Record<string, Field> = {
   'Date': 'date', 'Employee_Name': 'employee', 'Employee_ID': 'employeeId',
@@ -38,24 +36,23 @@ export const GAS_FIELD_TO_WEB: Record<string, Field> = {
   'Completion_Time': 'completionTime', 'Expected_Duration': 'expectedDuration',
   'Actual_Duration': 'actualDuration', 'Link': 'link', 'Notes': 'notes'
 };
-
 export const HEADER_ALIASES: Record<string, Field> = {
-  'date': 'date', 'task date': 'date', 'report date': 'date', 'dt': 'date',
-  'day': 'date', 'work date': 'date',
+  'date': 'date', 'task date': 'date', 'dt': 'date',
+  'day': 'date', 
   'employee': 'employee', 'employee name': 'employee', 'name': 'employee',
-  'staff': 'employee', 'team member': 'employee', 'member': 'employee',
-  'assigned to': 'employee', 'owner': 'employee', 'resource': 'employee',
+  'staff': 'employee', 'member': 'employee',
+  'owner': 'employee', 'resource': 'employee',
   'emp name': 'employee', 'person': 'employee',
   'employee id': 'employeeId', 'emp id': 'employeeId', 'empid': 'employeeId',
   'department': 'department', 'dept': 'department', 'team': 'department',
   'division': 'department', 'function': 'department',
   'task': 'task', 'task name': 'task', 'work': 'task', 'work done': 'task',
   'activity': 'task', 'description': 'task', 'task description': 'task',
-  'details': 'task', 'particulars': 'task', 'job': 'task', 'work item': 'task',
+  'details': 'task', 'particulars': 'task', 'job': 'task', 
   'today task': 'task', "today's task": 'task', 'tasks': 'task',
   'category': 'category', 'task category': 'category', 'type': 'category',
   'task type': 'category',
-  'status': 'status', 'task status': 'status', 'current status': 'status',
+  'status': 'status', 'task status': 'status', 
   'progress': 'status', 'state': 'status', 'completion': 'status',
   'priority': 'priority', 'urgency': 'priority',
   'start date': 'startDate', 'started on': 'startDate',
@@ -73,7 +70,6 @@ export const HEADER_ALIASES: Record<string, Field> = {
   'remarks': 'notes', 'notes': 'notes', 'comment': 'notes',
   'comments': 'notes', 'observation': 'notes'
 };
-
 export const SEED_DEPARTMENTS: Department[] = [
   { id: 'DEP-01', name: 'Sales', aliases: ['sales team', 'bd', 'business development'], senderDomains: [] },
   { id: 'DEP-02', name: 'Marketing', aliases: ['mktg', 'growth', 'brand'], senderDomains: [] },
@@ -84,7 +80,6 @@ export const SEED_DEPARTMENTS: Department[] = [
   { id: 'DEP-07', name: 'Support', aliases: ['customer support', 'helpdesk', 'service desk'], senderDomains: [] },
   { id: 'DEP-99', name: 'Unassigned', aliases: [], senderDomains: [] }
 ];
-
 /**
  * expectedDuration is in HOURS, and null means "nobody has stated an
  * expectation". Never substitute 0 — that would make every task infinitely
@@ -105,7 +100,6 @@ export const SEED_CATEGORIES: Category[] = [
   { id: 'CAT-12', name: 'Data Entry', keywords: ['data entry', 'excel', 'sheet update', 'upload'], expectedDuration: 1 },
   { id: 'CAT-99', name: 'Uncategorised', keywords: [], expectedDuration: null }
 ];
-
 export const SEED_EMPLOYEES: Employee[] = [
   { id: 'EMP-001', name: 'Rahul Mehta', aliases: ['rahul', 'rahul m'], department: 'Sales', active: true },
   { id: 'EMP-002', name: 'Priya Sharma', aliases: ['priya'], department: 'Sales', active: true },
@@ -118,7 +112,6 @@ export const SEED_EMPLOYEES: Employee[] = [
   { id: 'EMP-009', name: 'Rohit Verma', aliases: ['rohit'], department: 'Operations', active: true },
   { id: 'EMP-010', name: 'Ayesha Siddiqui', aliases: ['ayesha', 'ayesha s'], department: 'Operations', active: true }
 ];
-
 export function seedMasters(employees: Employee[] = SEED_EMPLOYEES): Masters {
   return {
     employees,
@@ -128,7 +121,6 @@ export function seedMasters(employees: Employee[] = SEED_EMPLOYEES): Masters {
     headerAliases: HEADER_ALIASES
   };
 }
-
 /** Masters with no employees — mirrors a fresh install before the roster is set. */
 export function emptyRosterMasters(): Masters {
   return seedMasters([]);

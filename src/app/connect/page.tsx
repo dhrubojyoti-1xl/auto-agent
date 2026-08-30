@@ -176,9 +176,8 @@ export default async function ConnectPage({
             </li>
             <li>
               Decides whether it is a report from what the columns mean, not from their
-              exact names &mdash; &ldquo;Work Done Today&rdquo;, &ldquo;Staff Member&rdquo;
-              and &ldquo;Current State&rdquo; are understood without anyone configuring
-              them. No labels, no template, no rules for you to maintain.
+              exact names &mdash; an abbreviation, a verb phrase or whatever the team calls the work is
+              understood without anyone configuring it. No labels, no template, no rules for you to maintain.
             </li>
             <li>
               Keeps yesterday&rsquo;s work, today&rsquo;s work and tomorrow&rsquo;s plan
