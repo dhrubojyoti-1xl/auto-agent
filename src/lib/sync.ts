@@ -22,7 +22,7 @@ import {
 } from './core/detect';
 import type { MessageClassification } from './core/detect';
 import { csvToTables } from './core/attachments';
-import { fetchSheetCsv, findSheetLinks } from './core/links';
+import { fetchSheet, findSheetLinks } from './core/links';
 import { ingestDocument } from './core/ingest';
 import { parseDate } from './core/normalize';
 import type { SourceDocument } from './core/types';
@@ -301,7 +301,7 @@ async function documentsFromMessage(
   if (!docs.length) {
     const links = findSheetLinks(msg.html, msg.text).slice(0, MAX_SHEET_LINKS_PER_MESSAGE);
     for (const link of links) {
-      const got = await fetchSheetCsv(link);
+      const got = await fetchSheet(link);
       if (!got.ok) {
         skipped.push({
           filename: `Google Sheet ${link.id.slice(0, 12)}…`,
@@ -309,7 +309,11 @@ async function documentsFromMessage(
         });
         continue;
       }
-      const tables = csvToTables(got.csv, 'sheet.csv');
+      const tables = got.kind === 'workbook'
+        ? await attachmentToTables('sheet.xlsx',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            got.workbook)
+        : csvToTables(got.csv, 'sheet.csv');
       if (!tables.length) {
         skipped.push({
           filename: `Google Sheet ${link.id.slice(0, 12)}…`,

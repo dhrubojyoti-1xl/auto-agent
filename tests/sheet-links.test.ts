@@ -11,7 +11,9 @@
  * for the message to become data.
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { exportUrlFor, fetchSheetCsv, findSheetLinks } from '../src/lib/core/links';
+import {
+  exportUrlFor, fetchSheet, fetchSheetCsv, findSheetLinks, workbookUrlFor
+} from '../src/lib/core/links';
 import { senderDisplayName } from '../src/lib/core/ingest';
 import { resetDatabase } from './helpers';
 
@@ -73,7 +75,7 @@ describe('opening a sheet that is not shared', () => {
       status: 200, headers: { 'content-type': 'text/csv; charset=utf-8' } })));
     const got = await fetchSheetCsv(findSheetLinks('', `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`)[0]);
     expect(got.ok).toBe(true);
-    if (got.ok) expect(got.csv).toContain('Joining and Induction');
+    if (got.ok && got.kind === 'csv') expect(got.csv).toContain('Joining and Induction');
   });
 
   it('says the sheet is not shared, and how to fix it', async () => {
@@ -264,5 +266,77 @@ describe('statuses this team actually writes', () => {
     for (const s of ['Compleeted!!', 'Frobnicated', 'maybe?']) {
       expect(normalizeStatus(s, masters), s).toBeNull();
     }
+  });
+});
+
+describe('a sheet with more than one tab', () => {
+  const link = findSheetLinks('', `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`)[0];
+
+  afterAll(() => vi.unstubAllGlobals());
+
+  it('asks for the whole workbook, not just the first tab', () => {
+    expect(workbookUrlFor(SHEET_ID)).toContain('format=xlsx');
+  });
+
+  it('reads every worksheet a team keeps', async () => {
+    const ExcelJS = (await import('exceljs')).default;
+    const wb = new ExcelJS.Workbook();
+    for (const dept of ['Sales', 'Marketing']) {
+      const ws = wb.addWorksheet(dept);
+      ws.addRow(['Date', 'Employee Name', 'Department', 'Task', 'Status']);
+      ws.addRow(['12 Aug 2026', `${dept} Person`, dept, `${dept} work`, 'Completed']);
+    }
+    const buf = Buffer.from(await wb.xlsx.writeBuffer());
+
+    vi.stubGlobal('fetch', vi.fn(async (u: string | URL | Request) =>
+      String(u).includes('format=xlsx')
+        ? new Response(buf, { status: 200, headers: {
+            'content-type':
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' } })
+        : new Response('not used', { status: 200, headers: { 'content-type': 'text/csv' } })));
+
+    const got = await fetchSheet(link);
+    expect(got.ok).toBe(true);
+    if (!got.ok || got.kind !== 'workbook') throw new Error('expected a workbook');
+
+    const { attachmentToTables } = await import('../src/lib/core/attachments');
+    const tables = await attachmentToTables('sheet.xlsx',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', got.workbook);
+    expect(tables).toHaveLength(2);        // both tabs, not just the first
+  });
+
+  it('falls back to the single-tab CSV when the workbook cannot be had', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (u: string | URL | Request) =>
+      String(u).includes('format=xlsx')
+        ? new Response('<html>Sign in</html>',
+            { status: 200, headers: { 'content-type': 'text/html' } })
+        : new Response(SHEET_CSV,
+            { status: 200, headers: { 'content-type': 'text/csv' } })));
+
+    const got = await fetchSheet(link);
+    expect(got.ok).toBe(true);
+    if (got.ok && got.kind === 'csv') expect(got.csv).toContain('Joining and Induction');
+  });
+
+  it('honours a link that names one tab, rather than taking the workbook', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (u: string | URL | Request) => {
+      calls.push(String(u));
+      return new Response(SHEET_CSV,
+        { status: 200, headers: { 'content-type': 'text/csv' } });
+    }));
+    const tabbed = findSheetLinks('',
+      `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit#gid=555`)[0];
+    await fetchSheet(tabbed);
+    expect(calls.some(c => c.includes('format=xlsx'))).toBe(false);
+    expect(calls.some(c => c.includes('gid=555'))).toBe(true);
+  });
+
+  it('reports a sheet that is shared with nobody, whichever export is tried', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>Sign in</html>',
+      { status: 200, headers: { 'content-type': 'text/html' } })));
+    const got = await fetchSheet(link);
+    expect(got.ok).toBe(false);
+    if (!got.ok) expect(got.reason).toBe('NOT_SHARED');
   });
 });

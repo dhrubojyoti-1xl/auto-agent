@@ -34,6 +34,20 @@ export function exportUrlFor(id: string, gid = ''): string {
 }
 
 /**
+ * The whole workbook rather than one tab.
+ *
+ * A CSV export returns a single sheet — the first, or the one the link named.
+ * A team that keeps one tab per department, or this month beside last month,
+ * would have every tab but one silently ignored. The xlsx export returns them
+ * all, and the spreadsheet parser already turns every worksheet into a table.
+ *
+ * Still no Google permission: this is the same public export endpoint.
+ */
+export function workbookUrlFor(id: string): string {
+  return `https://docs.google.com/spreadsheets/d/${id}/export?format=xlsx`;
+}
+
+/**
  * Every distinct Google Sheet referenced anywhere in the message.
  *
  * Both the HTML and the plain-text part are searched: a link pasted into Gmail
@@ -61,7 +75,8 @@ export function findSheetLinks(html: string, text: string): SheetLink[] {
 }
 
 export type SheetFetch =
-  | { ok: true; csv: string }
+  | { ok: true; kind: 'csv'; csv: string }
+  | { ok: true; kind: 'workbook'; workbook: Buffer }
   | { ok: false; reason: 'NOT_SHARED' | 'TOO_LARGE' | 'FAILED'; detail: string };
 
 /**
@@ -108,7 +123,72 @@ export async function fetchSheetCsv(
         detail: `The Google Sheet at ${link.url} exceeded the size limit while downloading.`
       };
     }
-    return { ok: true, csv };
+    return { ok: true, kind: 'csv', csv };
+  } catch (e) {
+    const aborted = (e as Error).name === 'AbortError';
+    return {
+      ok: false, reason: 'FAILED',
+      detail: aborted
+        ? `Timed out after ${timeoutMs}ms opening the Google Sheet at ${link.url}.`
+        : `Could not open the Google Sheet at ${link.url}: ${(e as Error).message}`.slice(0, 300)
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Fetches every tab of a sheet, falling back to the single-tab CSV export.
+ *
+ * The workbook export is tried first because it is the complete answer. The
+ * CSV fallback exists because a link that names a specific tab (#gid=) means
+ * the sender pointed at that tab deliberately, and because a workbook export
+ * can fail for reasons a CSV export does not.
+ */
+export async function fetchSheet(
+  link: SheetLink, opts: { timeoutMs?: number; maxBytes?: number } = {}
+): Promise<SheetFetch> {
+  // A link that names a tab is a link to that tab.
+  if (!link.gid) {
+    const wb = await fetchWorkbook(link, opts);
+    if (wb.ok) return wb;
+    // A permission failure is final; anything else is worth one CSV attempt.
+    if (wb.reason === 'NOT_SHARED') {
+      const csv = await fetchSheetCsv(link, opts);
+      return csv.ok ? csv : wb;
+    }
+  }
+  return fetchSheetCsv(link, opts);
+}
+
+async function fetchWorkbook(
+  link: SheetLink, opts: { timeoutMs?: number; maxBytes?: number } = {}
+): Promise<SheetFetch> {
+  const timeoutMs = opts.timeoutMs ?? 15_000;
+  const maxBytes = opts.maxBytes ?? 5 * 1024 * 1024;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(workbookUrlFor(link.id), {
+      redirect: 'follow', signal: controller.signal
+    });
+    const type = (res.headers.get('content-type') || '').toLowerCase();
+    if (!res.ok || !/spreadsheetml|octet-stream|excel/.test(type)) {
+      return {
+        ok: false, reason: 'NOT_SHARED',
+        detail: `The Google Sheet at ${link.url} could not be opened. Set its sharing ` +
+                `to "Anyone with the link can view", or attach the file to the email.`
+      };
+    }
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length > maxBytes) {
+      return {
+        ok: false, reason: 'TOO_LARGE',
+        detail: `The Google Sheet at ${link.url} is ${Math.round(buf.length / 1024)}KB, ` +
+                `over the ${Math.round(maxBytes / 1024)}KB limit.`
+      };
+    }
+    return { ok: true, kind: 'workbook', workbook: buf };
   } catch (e) {
     const aborted = (e as Error).name === 'AbortError';
     return {
