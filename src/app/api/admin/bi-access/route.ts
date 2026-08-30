@@ -86,30 +86,16 @@ export async function POST(req: Request) {
   }
 
   try {
-    // The password is passed as a parameter to format(), never concatenated,
-    // so its contents cannot become SQL.
     const [{ exists }] = await query<{ exists: boolean }>(
       `select exists(select 1 from pg_roles where rolname = $1) as exists`, [ROLE]);
 
-    await query(
-      exists
-        ? `do $do$ begin execute format('alter role %I with login password %L', $1, $2); end $do$`
-        : `do $do$ begin execute format('create role %I with login password %L', $1, $2); end $do$`,
-      [ROLE, password]);
-
-    await query(`do $do$ begin
-                   execute format('grant connect on database %I to %I',
-                                  current_database(), $1);
-                 end $do$`, [ROLE]);
-    await query(`grant usage on schema public to ${ROLE}`);
-    for (const view of VIEWS) {
-      await query(`grant select on ${view} to ${ROLE}`);
-    }
-    // Nothing else, ever. Explicitly revoked in case a previous grant was wider.
-    await query(`revoke all on all tables in schema public from ${ROLE}`);
-    for (const view of VIEWS) {
-      await query(`grant select on ${view} to ${ROLE}`);
-    }
+    // The whole operation lives in a database function, because a DO block
+    // cannot take parameters — its body is a string literal, so a $1 inside it
+    // is never bound, and the attempt fails with "bind message supplies 2
+    // parameters, but prepared statement requires 0". A function can, so the
+    // password arrives as a real argument and reaches the DDL through
+    // format(%L) rather than being concatenated into it.
+    await query(`select create_bi_reader($1)`, [password]);
 
     return NextResponse.json({
       ok: true,

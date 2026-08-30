@@ -198,3 +198,31 @@ d('the Inbox shows the report, not the marketing', () => {
     expect(msgs.filter((m: any) => m.classification === 'NON_REPORT').length).toBe(9);
   });
 });
+
+describe('a failure that later runs have superseded is history, not a problem', () => {
+  const read = () => require('fs').readFileSync(
+    require('path').join(process.cwd(), 'src/app/health/page.tsx'), 'utf8') as string;
+
+  it('distinguishes a resolved failure from a current one', () => {
+    const src = read();
+    // Showing an error under "Last error" directly above twelve successful
+    // runs reads as though something is broken right now.
+    expect(src).toMatch(/errorIsHistory/);
+    expect(src).toMatch(/successesSince/);
+    expect(src).toMatch(/Resolved\./);
+    expect(src).toMatch(/The last sync failed\./);
+    expect(src).not.toMatch(/<strong>Last error:<\/strong>/);
+  });
+
+  it('collapses one fault repeated across messages into a count', () => {
+    const src = read();
+    expect(src).toMatch(/summariseError/);
+    expect(src).toMatch(/affected \$\{errorSummary\.repeats\} messages/);
+  });
+
+  it('does not print a raw multi-line dump into the manager-facing page', () => {
+    const src = read();
+    // Every path through the error display truncates.
+    expect(src).toMatch(/slice\(0, 240\)/);
+  });
+});

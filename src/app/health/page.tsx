@@ -56,7 +56,38 @@ export default async function SyncHealthPage() {
                       a.lastSyncStatus === 'REAUTH_REQUIRED') ||
     runs.slice(0, 3).some(r => r.status === 'GMAIL_AUTH_ERROR' ||
                                r.status === 'REAUTH_REQUIRED');
-  const lastError = runs.find(r => r.errorMessage)?.errorMessage || '';
+  /**
+   * The most recent failure, and whether it still matters.
+   *
+   * An error from a run that later runs have superseded is history, not a
+   * problem — but shown unqualified beside a healthy sync it reads as though
+   * something is broken right now. The fault here was reporting a schema error
+   * from before a migration was applied, under the heading "Last error",
+   * directly above twelve successful runs.
+   */
+  const failedRun = runs.find(r => r.errorMessage);
+  const failedIndex = failedRun ? runs.indexOf(failedRun) : -1;
+  const successesSince = failedIndex > 0
+    ? runs.slice(0, failedIndex).filter(r => r.status === 'OK').length : 0;
+  const errorIsHistory = successesSince > 0;
+
+  /**
+   * One line, not five copies of the same one.
+   *
+   * A run that hit the same fault on five messages reports it five times. The
+   * count is the useful part; the repetition is not.
+   */
+  function summariseError(raw: string): { text: string; repeats: number } {
+    const parts = raw.split('|').map(x => x.trim()).filter(Boolean);
+    const bodies = parts.map(p => p.replace(/^[0-9a-f]+:\s*/, ''));
+    const unique = [...new Set(bodies)];
+    return {
+      text: (unique[0] || raw).slice(0, 240),
+      repeats: bodies.length
+    };
+  }
+  const errorSummary = failedRun?.errorMessage
+    ? summariseError(failedRun.errorMessage) : null;
   // Every one of these comes from the analytics module, so this page cannot
   // disagree with the dashboard about what happened.
   const processed = coverage?.reportsDetected ?? 0;
@@ -192,13 +223,31 @@ export default async function SyncHealthPage() {
           <div className="kpi"><div className="label">Invalid rows</div><div className="value">{rejects.length}</div></div>
         </div>
 
-        {lastError && (
-          <div className="banner bad" style={{ marginTop: '1rem' }}>
-            <strong>Last error:</strong> {lastError}
+        {errorSummary && errorIsHistory && (
+          <div className="banner" style={{ marginTop: '1rem' }}>
+            <strong>Resolved.</strong> The last failure was on{' '}
+            {formatStamp(failedRun?.startedAt)}, and {successesSince} sync
+            {successesSince === 1 ? ' has' : 's have'} succeeded since.
+            <div className="small muted" style={{ marginTop: '.35rem' }}>
+              {errorSummary.text}
+              {errorSummary.repeats > 1 && ` — affected ${errorSummary.repeats} messages`}
+            </div>
           </div>
         )}
-        {!lastError && runs.length > 0 && (
-          <div className="banner ok" style={{ marginTop: '1rem' }}>No errors in the recent runs.</div>
+        {errorSummary && !errorIsHistory && (
+          <div className="banner bad" style={{ marginTop: '1rem' }}>
+            <strong>The last sync failed.</strong>{' '}
+            {formatStamp(failedRun?.startedAt)}
+            <div className="small" style={{ marginTop: '.35rem' }}>
+              {errorSummary.text}
+              {errorSummary.repeats > 1 && ` — affected ${errorSummary.repeats} messages`}
+            </div>
+          </div>
+        )}
+        {!errorSummary && runs.length > 0 && (
+          <div className="banner ok" style={{ marginTop: '1rem' }}>
+            No errors in the last {runs.length} run{runs.length === 1 ? '' : 's'}.
+          </div>
         )}
 
         <h2>Run history</h2>
@@ -232,7 +281,16 @@ export default async function SyncHealthPage() {
                     <td className="num">{r.rowsImported}</td>
                     <td className="num">{r.rowsRejected}</td>
                     <td className="num">{r.rowsDuplicate}</td>
-                    <td className="small muted">{r.errorMessage || '—'}</td>
+                    <td className="small muted">
+                      {r.errorMessage
+                        ? (() => {
+                            const e = summariseError(r.errorMessage);
+                            return e.repeats > 1
+                              ? `${e.text.slice(0, 90)}… (${e.repeats} messages)`
+                              : e.text.slice(0, 110);
+                          })()
+                        : '—'}
+                    </td>
                   </tr>
                 ))}
               </tbody>
