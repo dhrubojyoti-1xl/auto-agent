@@ -5,6 +5,8 @@ import { getUser } from '@/lib/users';
 import { listGmailAccounts, listSyncRuns } from '@/lib/accounts';
 import { googleConfigured } from '@/lib/google-oauth';
 import ConnectControls from './controls';
+import SchemaControls from './schema-controls';
+import { getSchemaStatus } from '@/lib/schema-status';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,10 +30,12 @@ export default async function ConnectPage({
 
   let accounts: Awaited<ReturnType<typeof listGmailAccounts>> = [];
   let runs: Awaited<ReturnType<typeof listSyncRuns>> = [];
+  let schema: Awaited<ReturnType<typeof getSchemaStatus>> | null = null;
   let dbError = '';
   try {
-    [accounts, runs] = await Promise.all([
-      listGmailAccounts(session.userId), listSyncRuns(session.userId, 10)
+    [accounts, runs, schema] = await Promise.all([
+      listGmailAccounts(session.userId), listSyncRuns(session.userId, 10),
+      getSchemaStatus()
     ]);
   } catch (e) {
     dbError = (e as Error).message;
@@ -74,6 +78,18 @@ export default async function ConnectPage({
             <strong>Administrator setup required.</strong> This deployment has no Google
             OAuth client yet. See <code>docs/GOOGLE_OAUTH_SETUP.md</code> — it is a one-time
             job and takes about ten minutes.
+          </div>
+        )}
+
+        {schema && !schema.ok && (
+          <div className="card" style={{ borderColor: 'var(--warn, #b45309)' }}>
+            <h3>Database update pending</h3>
+            <p className="small muted">
+              This deployment is running newer code than the database has been given.
+              Missing: {[...schema.missingColumns, ...schema.missingViews].join(', ')}.
+              Applying is safe to repeat and does not touch imported data.
+            </p>
+            <SchemaControls />
           </div>
         )}
 
