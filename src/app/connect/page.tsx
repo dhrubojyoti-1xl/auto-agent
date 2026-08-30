@@ -164,7 +164,10 @@ export default async function ConnectPage({
               Checks your inbox once a day, and whenever you press
               <strong> Sync now</strong>.
             </li>
-            <li>Reads each new message and any spreadsheet or CSV attached to it.</li>
+            <li>
+              Reads each new message, any spreadsheet or CSV attached to it, and any
+              Google Sheet it links to.
+            </li>
             <li>Decides whether it is a report by looking for Date / Employee / Task / Status
                 columns — no labels, no rules for you to maintain.</li>
             <li>Normalises statuses, names, dates and departments.</li>

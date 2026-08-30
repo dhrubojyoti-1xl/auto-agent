@@ -15,6 +15,8 @@
 import { analyze } from './core/analysis';
 import { attachmentToTables, isParsableAttachment } from './core/attachments';
 import { buildGmailQuery, detectInBody, detectInTables } from './core/detect';
+import { csvToTables } from './core/attachments';
+import { fetchSheetCsv, findSheetLinks } from './core/links';
 import { ingestDocument } from './core/ingest';
 import { parseDate } from './core/normalize';
 import type { SourceDocument } from './core/types';
@@ -194,6 +196,8 @@ export interface SkippedAttachment {
   detail: string;
 }
 
+const MAX_SHEET_LINKS_PER_MESSAGE = Number(process.env.MAX_SHEET_LINKS || 3);
+
 async function documentsFromMessage(
   msg: GmailMessage, accessToken: string,
   masters: Awaited<ReturnType<typeof loadMasters>>,
@@ -263,6 +267,47 @@ async function documentsFromMessage(
         `${att.filename}: ${(e as Error).message}`, msg.id);
     }
   }
+  // A report can arrive as a link to a Google Sheet instead of a file. Only
+  // looked for when nothing else in the message was a report, so a normal
+  // report that happens to cite a sheet is not fetched needlessly.
+  if (!docs.length) {
+    const links = findSheetLinks(msg.html, msg.text).slice(0, MAX_SHEET_LINKS_PER_MESSAGE);
+    for (const link of links) {
+      const got = await fetchSheetCsv(link);
+      if (!got.ok) {
+        skipped.push({
+          filename: `Google Sheet ${link.id.slice(0, 12)}…`,
+          reason: `SHEET_${got.reason}`, detail: got.detail
+        });
+        continue;
+      }
+      const tables = csvToTables(got.csv, 'sheet.csv');
+      if (!tables.length) {
+        skipped.push({
+          filename: `Google Sheet ${link.id.slice(0, 12)}…`,
+          reason: 'SHEET_EMPTY',
+          detail: `The Google Sheet at ${link.url} opened but held no rows.`
+        });
+        continue;
+      }
+      const signal = detectInTables(tables, masters, cfg);
+      if (!signal.isReport) {
+        skipped.push({
+          filename: `Google Sheet ${link.id.slice(0, 12)}…`,
+          reason: 'SHEET_NOT_A_REPORT',
+          detail: `${link.url}: ${signal.reason}`
+        });
+        continue;
+      }
+      docs.push({
+        documentId: `gmail:${msg.id}:sheet:${link.id}${link.gid ? ':' + link.gid : ''}`,
+        subject: `${msg.subject} [Google Sheet]`,
+        sender: msg.from, receivedAt: msg.date,
+        tables, attachmentName: `Google Sheet ${link.id.slice(0, 12)}…`
+      });
+    }
+  }
+
   return docs;
 }
 

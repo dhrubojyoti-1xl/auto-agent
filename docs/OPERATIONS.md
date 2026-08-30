@@ -23,6 +23,7 @@ holds the hourly schedule for a Pro plan; nothing else changes.
 |---|---|---|
 | Messages read per sync | 60 | `MAX_MESSAGES_PER_SYNC` |
 | Largest attachment fetched | 8 MB | `MAX_ATTACHMENT_BYTES` |
+| Google Sheet links followed per message | 3 | `MAX_SHEET_LINKS` |
 | Gmail request timeout | 20 s | `GMAIL_TIMEOUT_MS` |
 | Gmail attempts per request | 3 | `GMAIL_MAX_ATTEMPTS` |
 | Syncs per user per minute | 10 | `RATE_LIMIT_SYNC` |
@@ -37,6 +38,24 @@ The AI is sent a computed dataset, never email contents, and the dataset is
 fingerprinted: an unchanged period reuses the stored commentary instead of
 paying for an identical one. **Rewrite commentary** forces a fresh call when
 you want one.
+
+## Reports that arrive as a link
+
+A department that keeps its report in a Google Sheet pastes the link rather
+than attaching a file. Those messages are followed: the sheet's own CSV export
+is read directly, which needs **no extra Google permission** — no Drive scope,
+no re-consent, no verification review.
+
+The one requirement is on the sender's side: the sheet must be shared as
+**Anyone with the link can view**. A restricted sheet appears on Data quality
+as `SHEET_NOT_SHARED`, naming the sheet and the fix, because only its owner can
+change that.
+
+A sheet with no Employee column is attributed to whoever sent the email — one
+person's own report does not repeat their name on every line. A sheet that
+*does* have an Employee column and leaves a cell blank is still rejected as a
+malformed row; guessing there would put somebody else's work under the
+sender's name.
 
 ## Backup and recovery
 
@@ -74,6 +93,7 @@ everything scanned, imported, rejected and de-duplicated.
 |---|---|
 | A report arrived but no tasks appeared | **Data quality** — the row or the file is listed with a reason |
 | A spreadsheet was ignored | **Data quality** — too large, unreadable, or not a report, by filename |
+| A linked Google Sheet was ignored | **Data quality** — usually `SHEET_NOT_SHARED`: the sender must set sharing to "Anyone with the link can view" |
 | "Reconnect Gmail" | the grant was revoked in the Google account; reconnect on the Inbox page |
 | Dashboard shows an error banner | the database was briefly unreachable; imported data is unaffected |
 | No AI commentary | the report is still complete; only the commentary degrades |

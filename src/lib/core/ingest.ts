@@ -95,6 +95,13 @@ function buildTaskRecord(
   raw: Record<string, string>,
   ctx: {
     reportId: string; documentId: string; receivedAt: string; departmentHint: string;
+    /**
+     * Who sent the report, used only when the table has no employee column at
+     * all. A blank cell in a table that HAS one is a malformed row and is
+     * still rejected — attributing it to the sender would invent an author for
+     * somebody else's line.
+     */
+    senderEmployee: string;
     tableIndex: number; rowIndex: number;
   },
   masters: Masters, cfg: EngineConfig, createdEmployees: Employee[]
@@ -114,8 +121,17 @@ function buildTaskRecord(
   }
 
   // --- Employee (required) ---
-  const rawEmp = cleanWhitespace(raw.employee);
-  if (!rawEmp) return { ok: false, reason: 'MISSING_REQUIRED_FIELD', detail: 'Employee name is empty' };
+  // A one-person report routinely omits the name: the sender is the author,
+  // and writing it on every row would be redundant. Falling back to the sender
+  // is only safe when the table never had an employee column, which the caller
+  // determines from the header, not from this row being blank.
+  const rawEmp = cleanWhitespace(raw.employee) || ctx.senderEmployee;
+  if (!rawEmp) {
+    return {
+      ok: false, reason: 'MISSING_REQUIRED_FIELD',
+      detail: 'Employee name is empty, and the sender could not be identified either'
+    };
+  }
   const deptRaw = cleanWhitespace(raw.department);
   const deptFromRow = deptRaw ? lookupDepartment(deptRaw, masters) || titleIfNew(deptRaw) : '';
   const emp = resolveEmployee(
@@ -292,6 +308,10 @@ export function ingestDocument(
     findDepartmentInText(doc.subject, masters, cfg) ||
     departmentFromSender(domain, doc.sender, masters) || '';
 
+  // The sender as a person: "Dhrubo Ganguly <d@x.com>" -> "Dhrubo Ganguly",
+  // and a bare address falls back to its local part.
+  const senderName = senderDisplayName(doc.sender);
+
   // 4. Parse every report table
   const built: BuildOk[] = [];
   const rejected: RejectedRow[] = [];
@@ -307,7 +327,9 @@ export function ingestDocument(
       const res = buildTaskRecord(
         raw,
         { reportId, documentId: doc.documentId, receivedAt: doc.receivedAt,
-          departmentHint, tableIndex: tIdx, rowIndex: r },
+          departmentHint, tableIndex: tIdx, rowIndex: r,
+          // Only when this table has no employee column of its own.
+          senderEmployee: 'employee' in rt.header.mapping ? '' : senderName },
         masters, cfg, createdEmployees
       );
       if (res.ok) built.push(res);
@@ -381,4 +403,37 @@ export function ingestDocument(
       ? `${accepted.length} imported, ${rejected.length} rejected, ${skippedIdempotent} already present`
       : `${accepted.length} imported, ${skippedIdempotent} already present`
   };
+}
+
+/**
+ * The human name behind a From header.
+ *
+ * "Dhrubo Ganguly <gangulydhrubo@gmail.com>" -> "Dhrubo Ganguly"
+ * "gangulydhrubo@gmail.com"                  -> "Gangulydhrubo"
+ *
+ * The address is only used when there is no display name, and the local part
+ * is title-cased rather than left as an address, because it becomes an
+ * employee name on screen.
+ */
+export function senderDisplayName(from: string): string {
+  const raw = cleanWhitespace(from || '');
+  if (!raw) return '';
+
+  const named = raw.match(/^\s*"?([^"<]+?)"?\s*<[^>]+>\s*$/);
+  if (named) {
+    const name = cleanWhitespace(named[1]);
+    if (name && !name.includes('@')) return name;
+  }
+
+  const addr = raw.match(/<([^>]+)>/)?.[1] || raw;
+  const local = addr.split('@')[0] || '';
+  if (!local) return '';
+  return local
+    .replace(/[._-]+/g, ' ')
+    .replace(/\d+/g, '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(w => w[0].toUpperCase() + w.slice(1))
+    .join(' ');
 }
