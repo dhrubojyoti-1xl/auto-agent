@@ -182,10 +182,14 @@ function seedDepartments_() {
   const sh = sheet_(SHEETS.DEPARTMENTS);
   if (sh.getLastRow() > 1) return;
   appendRows_(SHEETS.DEPARTMENTS, [
-    ['DEP-01', 'Sales',      'sales team,bd,business development', 'Anita Rao',   '', '', 'TRUE'],
-    ['DEP-02', 'Marketing',  'mktg,growth,brand',                  'Vikram Shah', '', '', 'TRUE'],
-    ['DEP-03', 'Operations', 'ops,operation,service delivery',     'Farhan Ali',  '', '', 'TRUE'],
-    ['DEP-99', 'Unassigned', '',                                   '',            '', '', 'TRUE']
+    ['DEP-01', 'Sales',       'sales team,bd,business development',                    'Anita Rao',   '', '', 'TRUE'],
+    ['DEP-02', 'Marketing',   'mktg,growth,brand',                                     'Vikram Shah', '', '', 'TRUE'],
+    ['DEP-03', 'Operations',  'ops,operation,service delivery',                         'Farhan Ali',  '', '', 'TRUE'],
+    ['DEP-04', 'HR',          'human resources,people,people ops,talent,recruitment',   '',            '', '', 'TRUE'],
+    ['DEP-05', 'Finance',     'accounts,accounting,fin',                                '',            '', '', 'TRUE'],
+    ['DEP-06', 'Development', 'dev,swd,engineering,software,tech,it',                   '',            '', '', 'TRUE'],
+    ['DEP-07', 'Support',     'customer support,helpdesk,service desk',                 '',            '', '', 'TRUE'],
+    ['DEP-99', 'Unassigned',  '',                                                       '',            '', '', 'TRUE']
   ]);
 }
 

@@ -34,8 +34,10 @@ const SIGNALS: Record<string, { strong: string[]; weak: string[]; against?: stri
     against: ['start', 'end', 'completion', 'finish', 'due', 'target', 'update']
   },
   employee: {
+    // "Who" is a whole column heading on its own in plenty of real reports,
+    // and it can only mean one thing.
     strong: ['employee', 'emp', 'staff', 'person', 'member', 'worker', 'assignee',
-             'resource', 'nombre', 'empleado', 'mitarbeiter', 'karmachari'],
+             'who', 'resource', 'nombre', 'empleado', 'mitarbeiter', 'karmachari'],
     weak: ['name', 'nm', 'by', 'owner', 'assigned', 'team'],
     against: ['task', 'project', 'file', 'department', 'client', 'company', 'sheet']
   },
@@ -49,16 +51,20 @@ const SIGNALS: Record<string, { strong: string[]; weak: string[]; against?: stri
     // "plan" is strong because a column headed "Tomorrow's Plan" is the work
     // column of a report — the only thing in it is tasks. "planned" stays with
     // expectedDuration, where "Planned Hours" belongs.
-    strong: ['task', 'work', 'activity', 'job', 'assignment', 'plan',
+    strong: ['task', 'work', 'activity', 'job', 'assignment', 'plan', 'contribution',
              'deliverable', 'tarea', 'trabajo', 'aufgabe', 'kaam'],
     weak: ['description', 'desc', 'detail', 'particular', 'item', 'done',
-           'today', 'yesterday', 'tomorrow', 'performed', 'summary', 'action'],
+           'today', 'yesterday', 'tomorrow', 'performed', 'summary', 'action',
+           'output', 'accomplishment', 'achievement'],
     against: ['status', 'state', 'date', 'time', 'hour', 'count', 'id', 'no',
               'category', 'type', 'link', 'url']
   },
   status: {
-    strong: ['status', 'state', 'progress', 'stage', 'estado', 'zustand'],
-    weak: ['completion', 'current', 'result', 'outcome', 'condition'],
+    strong: ['status', 'state', 'progress', 'stage', 'situation', 'stand',
+             'estado', 'zustand'],
+    // "Where it stands" is a heading a person writes; "stand" carries it.
+    weak: ['completion', 'current', 'result', 'outcome', 'condition', 'position',
+           'where'],
     against: ['date', 'time', 'report', 'update', 'note']
   },
   category: {

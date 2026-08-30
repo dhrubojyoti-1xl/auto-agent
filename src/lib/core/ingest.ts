@@ -17,7 +17,7 @@ import type {
   SourceDocument, TaskRecord
 } from './types';
 import {
-  cleanWhitespace, findDepartmentInText, departmentFromSender,
+  cleanWhitespace, departmentFromSender,
   expectedDurationFor, keyify, lookupDepartment, normalizePriority, normalizeStatus,
   normalizeTask, parseDate, parseHours, parseTime, resolveCategory, resolveEmployee,
   shortHash

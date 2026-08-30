@@ -143,3 +143,25 @@ describe('a configured alias always beats a guess', () => {
     expect(via('Day')).toBe('date');
   });
 });
+
+describe('the wordings the brief itself names', () => {
+  const cases: [string, string][] = [
+    ['Who', 'employee'],
+    ["Today's contribution", 'task'],
+    ['Where it stands', 'status'],
+    ['Day', 'date'],
+    ['Person', 'employee'],
+    ['Activity', 'task'],
+    ['Progress', 'status'],
+    ['Report Date', 'date'],
+    ['Staff', 'employee'],
+    ['Work completed', 'task'],
+    ['Current situation', 'status'],
+    ['Work done yesterday', 'task'],
+    ['Present Status', 'status'],
+    ['Reporting Dt', 'date']
+  ];
+  for (const [header, field] of cases) {
+    it(`"${header}" means ${field}`, () => expect(via(header)).toBe(field));
+  }
+});

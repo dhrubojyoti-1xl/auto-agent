@@ -78,6 +78,10 @@ export const SEED_DEPARTMENTS: Department[] = [
   { id: 'DEP-01', name: 'Sales', aliases: ['sales team', 'bd', 'business development'], senderDomains: [] },
   { id: 'DEP-02', name: 'Marketing', aliases: ['mktg', 'growth', 'brand'], senderDomains: [] },
   { id: 'DEP-03', name: 'Operations', aliases: ['ops', 'operation', 'service delivery'], senderDomains: [] },
+  { id: 'DEP-04', name: 'HR', aliases: ['human resources', 'people', 'people ops', 'talent', 'recruitment'], senderDomains: [] },
+  { id: 'DEP-05', name: 'Finance', aliases: ['accounts', 'accounting', 'fin'], senderDomains: [] },
+  { id: 'DEP-06', name: 'Development', aliases: ['dev', 'swd', 'engineering', 'software', 'tech', 'it'], senderDomains: [] },
+  { id: 'DEP-07', name: 'Support', aliases: ['customer support', 'helpdesk', 'service desk'], senderDomains: [] },
   { id: 'DEP-99', name: 'Unassigned', aliases: [], senderDomains: [] }
 ];
 
