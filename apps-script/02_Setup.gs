@@ -121,6 +121,8 @@ function seedStatusAliases_() {
     'progress': 'In Progress', 'ongoing': 'In Progress', 'wip': 'In Progress',
     'working': 'In Progress', 'started': 'In Progress', 'doing': 'In Progress',
     'partially done': 'In Progress', 'partial': 'In Progress', 'ip': 'In Progress',
+    'in review': 'In Progress', 'under review': 'In Progress', 'reviewing': 'In Progress',
+    'for review': 'In Progress', 'in testing': 'In Progress', 'in qa': 'In Progress',
     'pending': 'Pending', 'waiting': 'Pending', 'not done': 'Pending',
     'incomplete': 'Pending', 'open': 'Pending', 'todo': 'Pending',
     'to do': 'Pending', 'hold': 'Pending', 'on hold': 'Pending', 'p': 'Pending',

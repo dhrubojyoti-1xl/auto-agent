@@ -243,3 +243,26 @@ d('the whole message, end to end', () => {
     expect(n).toBe(3);
   });
 });
+
+describe('statuses this team actually writes', () => {
+  it('recognises work that is finished but not yet approved', async () => {
+    const { seedMasters } = await import('../src/lib/seed');
+    const { normalizeStatus } = await import('../src/lib/core/normalize');
+    const masters = seedMasters([]);
+    // Six rows of a real report were rejected for exactly this word.
+    for (const s of ['In Review', 'in review', 'UNDER REVIEW', 'Reviewing',
+                     'For Review', 'In Testing', 'In QA']) {
+      expect(normalizeStatus(s, masters), s).toBe('In Progress');
+    }
+  });
+
+  it('still refuses a status nobody has defined', async () => {
+    const { seedMasters } = await import('../src/lib/seed');
+    const { normalizeStatus } = await import('../src/lib/core/normalize');
+    const masters = seedMasters([]);
+    // Adding aliases must not turn the mapper into a guesser.
+    for (const s of ['Compleeted!!', 'Frobnicated', 'maybe?']) {
+      expect(normalizeStatus(s, masters), s).toBeNull();
+    }
+  });
+});
