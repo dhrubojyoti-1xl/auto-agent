@@ -158,3 +158,25 @@ describe('an error on screen never carries a credential', () => {
     expect(safeErrorMessage(new Error('x'.repeat(5000))).length).toBe(300);
   });
 });
+
+describe('the product does not claim a schedule it does not keep', () => {
+  const read = (p: string) =>
+    require('fs').readFileSync(require('path').join(process.cwd(), p), 'utf8') as string;
+
+  it('the cron config and the interface agree', () => {
+    const cron = JSON.parse(read('vercel.json')).crons[0].schedule as string;
+    // "0 3 * * *" — once a day. An hourly claim anywhere in the UI would be a
+    // promise the deployed plan cannot keep.
+    expect(cron.split(' ')[1]).not.toBe('*');
+
+    for (const page of ['src/app/connect/page.tsx', 'src/app/health/page.tsx',
+                        'src/app/page.tsx']) {
+      const text = read(page);
+      const claims = text.match(/every hour|hourly/gi) || [];
+      // The only permitted mention is the note that hourly needs a paid plan.
+      for (const c of claims) {
+        expect(text, `${page}: "${c}"`).toMatch(/hourly needs a Vercel Pro plan/);
+      }
+    }
+  });
+});

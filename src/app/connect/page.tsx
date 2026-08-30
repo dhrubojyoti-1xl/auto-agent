@@ -160,7 +160,10 @@ export default async function ConnectPage({
         <h2>What the assistant does on its own</h2>
         <div className="card small">
           <ol style={{ margin: 0, paddingLeft: '1.1rem', lineHeight: 1.8 }}>
-            <li>Checks your inbox every hour.</li>
+            <li>
+              Checks your inbox once a day, and whenever you press
+              <strong> Sync now</strong>.
+            </li>
             <li>Reads each new message and any spreadsheet or CSV attached to it.</li>
             <li>Decides whether it is a report by looking for Date / Employee / Task / Status
                 columns — no labels, no rules for you to maintain.</li>

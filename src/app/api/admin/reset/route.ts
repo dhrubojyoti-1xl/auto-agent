@@ -41,9 +41,14 @@ export async function POST(req: Request) {
   await query('delete from documents where owner_user_id = $1', [uid]);
   await query('delete from sync_runs where owner_user_id = $1', [uid]);
   // Employees the importer invented, now that the reports they came from are
-  // gone. Configured employees are untouched.
+  // gone. Configured employees are untouched — and so is anyone still named by
+  // a surviving task, including another tenant's, since the employee roster is
+  // shared across the deployment and one user's purge must not empty another's.
   const wiped = await query<{ employee_id: string }>(
-    `delete from employees where auto_created returning employee_id`);
+    `delete from employees e
+      where e.auto_created
+        and not exists (select 1 from tasks t where t.employee_name = e.employee_name)
+      returning e.employee_id`);
 
   // Forget which Gmail messages were seen, so a fresh sync re-reads the inbox
   // rather than skipping everything as already-processed.

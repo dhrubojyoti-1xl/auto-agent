@@ -72,7 +72,7 @@ export async function GET(req: Request) {
                   error_message, processed_at, gmail_message_id
            from documents where owner_user_id = $1 order by processed_at limit ${MAX_ROWS}`, [uid]),
     query(`select employee_id, employee_name, name_aliases, department, active,
-                  joining_date, role, email from employees`),
+                  auto_created, joining_date, role, email from employees`),
     query(`select department_id, department_name, name_aliases, manager, manager_email,
                   sender_domains, active from departments`),
     query(`select category_id, category_name, match_keywords, expected_duration, active, notes

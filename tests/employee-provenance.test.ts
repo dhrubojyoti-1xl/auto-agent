@@ -63,13 +63,29 @@ d('invented employees are marked, shown and purged', () => {
     expect(one.firstSeen).toContain('2026-08-12');
   });
 
-  it('a purge removes the invented ones and keeps the configured one', async () => {
+  it('a purge spares an invented employee another tenant is still using', async () => {
+    // Same shared roster, a second tenant's task still naming "Invented One".
+    await db.query(
+      `insert into users (id, kind, email) values (2, 'local', 'other@co.com')
+       on conflict (id) do nothing`);
+    await db.query(
+      `insert into tasks (task_id, task_date, department, employee_name, task,
+                          task_normalized, task_status, duration_basis,
+                          source_document_id, task_fingerprint, owner_user_id)
+       values ('Q-1', date '2026-08-12', 'Operations', 'Invented One', 'Their task',
+               'their task', 'Completed', 'Insufficient Data', 'Q', 'q1', 2)`);
     await db.query('delete from tasks where owner_user_id = $1', [UID]);
+
     const wiped = await db.query(
-      `delete from employees where auto_created returning employee_id`);
-    expect(wiped.length).toBe(2);
-    const left = await db.query('select employee_name from employees');
-    expect(left.map((r: any) => r.employee_name)).toEqual(['Configured Person']);
+      `delete from employees e
+        where e.auto_created
+          and not exists (select 1 from tasks t where t.employee_name = e.employee_name)
+        returning e.employee_id`);
+
+    const left = await db.query('select employee_name from employees order by employee_name');
+    expect(wiped.length).toBe(1);                       // only the unused one went
+    expect(left.map((r: any) => r.employee_name))
+      .toEqual(['Configured Person', 'Invented One']);  // the other tenant keeps theirs
   });
 
   it('the migration marks ids that were generated before the column existed', async () => {
