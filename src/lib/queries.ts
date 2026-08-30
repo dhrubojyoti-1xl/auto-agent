@@ -14,7 +14,9 @@ const NOT_PLANNED = "work_kind <> 'PLANNED'";
 export interface Kpis {
   total: number; completed: number; pending: number; inProgress: number;
   blocked: number; completionRate: number; slowTasks: number;
-  repeatedTasks: number; departmentsReporting: number; employeesReporting: number;
+  repeatedTasks: number;
+  repeatGroups: number;
+  repeatAttention: number; departmentsReporting: number; employeesReporting: number;
   insufficientDuration: number; firstDate: string | null; lastDate: string | null;
 }
 
@@ -30,6 +32,9 @@ export async function getKpis(ownerUserId: number): Promise<Kpis> {
                / nullif(count(*),0), 1), 0) as completion_rate,
       count(*) filter (where slow_task_flag = 'TRUE')::int as slow_tasks,
       count(*) filter (where repeated_task_flag)::int as repeated_tasks,
+      (select count(*)::int from repeat_groups g where g.owner_user_id = $1) as repeat_groups,
+      (select count(*)::int from repeat_groups g where g.owner_user_id = $1
+         and g.classification in ('Needs Review', 'Potential Duplication')) as repeat_attention,
       count(distinct department)::int as departments_reporting,
       count(distinct employee_name)::int as employees_reporting,
       count(*) filter (where slow_task_flag = 'INSUFFICIENT_DATA')::int as insufficient_duration,
@@ -40,6 +45,8 @@ export async function getKpis(ownerUserId: number): Promise<Kpis> {
     inProgress: Number(r.in_progress), blocked: Number(r.blocked),
     completionRate: Number(r.completion_rate), slowTasks: Number(r.slow_tasks),
     repeatedTasks: Number(r.repeated_tasks),
+    repeatGroups: Number(r.repeat_groups ?? 0),
+    repeatAttention: Number(r.repeat_attention ?? 0),
     departmentsReporting: Number(r.departments_reporting),
     employeesReporting: Number(r.employees_reporting),
     insufficientDuration: Number(r.insufficient_duration),
@@ -264,6 +271,9 @@ export async function getDepartmentBreakdown(
                      / nullif(count(*),0),1),0) as completion_rate,
             count(*) filter (where slow_task_flag = 'TRUE')::int as slow_tasks,
             count(*) filter (where repeated_task_flag)::int as repeated_tasks,
+      (select count(*)::int from repeat_groups g where g.owner_user_id = $1) as repeat_groups,
+      (select count(*)::int from repeat_groups g where g.owner_user_id = $1
+         and g.classification in ('Needs Review', 'Potential Duplication')) as repeat_attention,
             count(distinct employee_name)::int as employees
      from tasks where ${where.join(' and ')}
      group by 1 order by total desc`, params);
@@ -272,7 +282,9 @@ export async function getDepartmentBreakdown(
     completed: Number(r.completed), pending: Number(r.pending),
     inProgress: Number(r.in_progress), blocked: Number(r.blocked),
     completionRate: Number(r.completion_rate), slowTasks: Number(r.slow_tasks),
-    repeatedTasks: Number(r.repeated_tasks), employees: Number(r.employees)
+    repeatedTasks: Number(r.repeated_tasks),
+    repeatGroups: Number(r.repeat_groups ?? 0),
+    repeatAttention: Number(r.repeat_attention ?? 0), employees: Number(r.employees)
   }));
 }
 
@@ -415,6 +427,51 @@ export async function getMessageOutcomes(ownerUserId: number, limit = 50) {
     classification: String(r.classification),
     evidence: String(r.evidence ?? ''),
     rejected: Number(r.rows_rejected ?? 0),
+    attachment: String(r.attachment_name ?? '')
+  }));
+}
+
+/**
+ * How many messages actually became reports, and how many were looked at.
+ *
+ * Counted over every message, not over the handful shown in a table. The
+ * Overview previously derived "Reports processed" from the eight rows it was
+ * about to display, so an inbox with nine newsletters at the top reported zero
+ * reports processed on a page showing forty-seven imported tasks.
+ */
+export async function getProcessingTotals(ownerUserId: number) {
+  const [row] = await query<Record<string, number>>(
+    `select
+       count(*) filter (where processing_status <> 'NO_DATA')::int as reports,
+       count(*)::int                                              as scanned,
+       coalesce(sum(rows_inserted), 0)::int                       as imported
+     from documents where owner_user_id = $1`, [ownerUserId]);
+  return {
+    reports: Number(row?.reports ?? 0),
+    scanned: Number(row?.scanned ?? 0),
+    imported: Number(row?.imported ?? 0)
+  };
+}
+
+/**
+ * The most recent messages that actually produced something, then the rest.
+ *
+ * A busy inbox pushes the one report of the day off the bottom of a list
+ * ordered purely by time, which leaves the manager looking at eight
+ * newsletters under a heading that says "Recent imports".
+ */
+export async function getRecentImports(ownerUserId: number, limit = 8) {
+  const rows = await query<Record<string, string | number>>(
+    `select subject, source, processing_status, rows_extracted, rows_inserted,
+            rows_skipped_idempotent, rows_rejected, processed_at, attachment_name
+     from documents
+     where owner_user_id = $1 and processing_status <> 'NO_DATA'
+     order by processed_at desc limit $2`, [ownerUserId, limit]);
+  return rows.map(r => ({
+    subject: String(r.subject ?? ''), source: String(r.source),
+    status: String(r.processing_status), extracted: Number(r.rows_extracted),
+    inserted: Number(r.rows_inserted), skipped: Number(r.rows_skipped_idempotent),
+    rejected: Number(r.rows_rejected), processedAt: String(r.processed_at),
     attachment: String(r.attachment_name ?? '')
   }));
 }

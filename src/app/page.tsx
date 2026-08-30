@@ -2,8 +2,9 @@ import { redirect } from 'next/navigation';
 import Nav from './nav';
 import { getSession } from '@/lib/auth';
 import { listGmailAccounts } from '@/lib/accounts';
-import { getDailyTrend, getDepartments, getDocuments, getEmployees, getKpis } from '@/lib/queries';
+import { getDailyTrend, getDepartments, getProcessingTotals, getRecentImports, getEmployees, getKpis } from '@/lib/queries';
 import { safeErrorMessage } from '@/lib/safe-error';
+import { formatStamp } from '@/lib/format-date';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,11 +44,11 @@ export default async function OverviewPage() {
   if (!session) redirect('/login');
   const uid = session.userId;
 
-  let kpis, departments, trend, employees, documents, inboxes;
+  let kpis, departments, trend, employees, imports, totals, inboxes;
   try {
-    [kpis, departments, trend, employees, documents, inboxes] = await Promise.all([
+    [kpis, departments, trend, employees, imports, totals, inboxes] = await Promise.all([
       getKpis(uid), getDepartments(uid), getDailyTrend(uid), getEmployees(uid),
-      getDocuments(uid, 8), listGmailAccounts(uid)
+      getRecentImports(uid, 8), getProcessingTotals(uid), listGmailAccounts(uid)
     ]);
   } catch (e) {
     return (
@@ -95,7 +96,14 @@ export default async function OverviewPage() {
 
   const lastSync = inboxes
     .map(a => a.lastSyncAt).filter(Boolean).sort().slice(-1)[0];
-  const reportsProcessed = documents.filter(d => d.status !== 'NO_DATA').length;
+
+  /**
+   * The driver returns a Date for a timestamptz column, and String(Date) is
+   * "Sun Aug 30 2026 07:09:00 GMT…", not an ISO string. Slicing it by ISO
+   * offsets printed the year as the time and the weekday as the date.
+   */
+  const syncedAt = lastSync ? new Date(lastSync as unknown as string) : null;
+  const validSync = syncedAt && !isNaN(syncedAt.getTime()) ? syncedAt : null;
 
   return (
     <>
@@ -115,23 +123,49 @@ export default async function OverviewPage() {
                note="completed ÷ total" />
           <Kpi label="Slow tasks" value={kpis.slowTasks}
                note={`${kpis.insufficientDuration} not measurable`} />
-          <Kpi label="Repeated tasks" value={kpis.repeatedTasks} />
+          {/* The instance count alone reads as 23 problems. The number that
+              matters is how many distinct pieces of work they are, and how
+              many of those a person should actually look at. */}
+          <Kpi label="Repeated tasks" value={kpis.repeatedTasks}
+               note={kpis.repeatGroups
+                 ? `${kpis.repeatGroups} recurring item(s)` +
+                   (kpis.repeatAttention ? `, ${kpis.repeatAttention} worth a look` : ', none unusual')
+                 : 'none'} />
           <Kpi label="Departments" value={kpis.departmentsReporting}
-               note={`${kpis.employeesReporting} employees`} />
-          <Kpi label="Reports processed" value={reportsProcessed}
-               note={inboxes.length ? inboxes[0].email : 'no inbox connected'} />
+               note={`${kpis.employeesReporting} ${kpis.employeesReporting === 1 ? 'person' : 'people'}`} />
+          <Kpi label="Reports processed" value={totals.reports}
+               note={`of ${totals.scanned} message(s) read`} />
           <Kpi label="Last sync"
-               value={lastSync ? String(lastSync).slice(11, 16) : '—'}
-               note={lastSync ? String(lastSync).slice(0, 10) : 'never'} />
+               value={validSync
+                 ? validSync.toISOString().slice(11, 16)
+                 : lastSync ? 'done' : '—'}
+               note={validSync ? validSync.toISOString().slice(0, 10) : 'never'} />
         </div>
 
         <h2>Daily task volume</h2>
         <div className="card">
           <Sparkline points={trend} />
           <div className="small muted" style={{ marginTop: '.5rem' }}>
-            {trend.length ? `${trend[0].date} → ${trend[trend.length - 1].date}` : 'No data'}
+            {/* Saying which days these are matters: the figure above counts
+                every task ever imported, and this shows the most recent days
+                only. Without the qualifier the two look like a contradiction. */}
+            {trend.length
+              ? `Last ${trend.length} day(s) with activity: ${trend[0].date} → ` +
+                `${trend[trend.length - 1].date}`
+              : 'No data'}
           </div>
         </div>
+
+        {departments.length === 1 && departments[0].department === 'Unassigned' && (
+          <div className="banner warn">
+            <strong>No department was stated in these reports.</strong> The reports carry no
+            department column, and the sender&rsquo;s address does not identify one, so
+            everything sits under &ldquo;Unassigned&rdquo;. Add a Department column to the
+            report, or set the department on{' '}
+            <a href="/quality">the people listed on Data quality</a>, and the split appears
+            here from the next sync.
+          </div>
+        )}
 
         <h2>Departments</h2>
         <div className="table-wrap">
@@ -203,6 +237,12 @@ export default async function OverviewPage() {
         </div>
 
         <h2>Recent imports</h2>
+        {imports.length === 0 && (
+          <div className="card small muted">
+            Nothing has been imported yet. Messages that were read and judged not to be
+            reports are listed on <a href="/quality">Data quality</a>.
+          </div>
+        )}
         <div className="table-wrap">
           <table>
             <thead>
@@ -213,11 +253,11 @@ export default async function OverviewPage() {
               </tr>
             </thead>
             <tbody>
-              {documents.map(d => (
-                <tr key={d.reportId}>
-                  <td className="small">{String(d.processedAt).slice(0, 16).replace('T', ' ')}</td>
-                  <td className="small">{d.source}</td>
-                  <td className="small">{d.subject}</td>
+              {imports.map((d, i) => (
+                <tr key={i}>
+                  <td className="small">{formatStamp(d.processedAt)}</td>
+                  <td className="small">{d.attachment || d.source}</td>
+                  <td className="small">{d.subject.slice(0, 70)}</td>
                   <td>
                     <span className={'pill ' + (
                       d.status === 'SUCCESS' ? 'ok' : d.status === 'PARTIAL' ? 'warn' : 'mute')}>

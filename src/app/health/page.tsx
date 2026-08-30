@@ -6,6 +6,7 @@ import { getKpis, getRejections } from '@/lib/queries';
 import { googleConfigured } from '@/lib/google-oauth';
 import { query } from '@/lib/db';
 import { safeErrorMessage } from '@/lib/safe-error';
+import { formatStamp } from '@/lib/format-date';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,7 +71,7 @@ export default async function SyncHealthPage() {
               <Row label="Connected Gmail"
                    value={inboxes.length ? inboxes.map(a => a.email).join(', ') : 'none'} />
               <Row label="Last sync"
-                   value={lastRun ? String(lastRun.startedAt).slice(0, 16).replace('T', ' ') : 'never'}
+                   value={formatStamp(lastRun?.startedAt, 'never')}
                    note={lastRun ? `(${lastRun.trigger})` : ''} />
               <Row label="Sync status" value={lastRun ? lastRun.status : '—'} />
               <Row label="Automatic schedule" value="daily"
@@ -141,7 +142,7 @@ export default async function SyncHealthPage() {
               <tbody>
                 {runs.map(r => (
                   <tr key={r.id}>
-                    <td className="small">{String(r.startedAt).slice(0, 16).replace('T', ' ')}</td>
+                    <td className="small">{formatStamp(r.startedAt)}</td>
                     <td className="small">{r.trigger}</td>
                     <td>
                       <span className={'pill ' + (r.status === 'OK' ? 'ok'

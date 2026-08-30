@@ -8,6 +8,7 @@ import ConnectControls from './controls';
 import SchemaControls from './schema-controls';
 import { getSchemaStatus } from '@/lib/schema-status';
 import { safeErrorMessage } from '@/lib/safe-error';
+import { formatStamp } from '@/lib/format-date';
 
 export const dynamic = 'force-dynamic';
 
@@ -125,9 +126,9 @@ export default async function ConnectPage({
                           <div className="small muted">{a.displayName}</div>
                         )}
                       </td>
-                      <td className="small">{String(a.connectedAt).slice(0, 16).replace('T', ' ')}</td>
+                      <td className="small">{formatStamp(a.connectedAt)}</td>
                       <td className="small">
-                        {a.lastSyncAt ? String(a.lastSyncAt).slice(0, 16).replace('T', ' ') : 'not yet'}
+                        {formatStamp(a.lastSyncAt, 'not yet')}
                       </td>
                       <td>
                         <span className={'pill ' + (
@@ -202,7 +203,7 @@ export default async function ConnectPage({
               <tbody>
                 {runs.map(r => (
                   <tr key={r.id}>
-                    <td className="small">{String(r.startedAt).slice(0, 16).replace('T', ' ')}</td>
+                    <td className="small">{formatStamp(r.startedAt)}</td>
                     <td className="small">{r.email}</td>
                     <td className="small">{r.trigger}</td>
                     <td>

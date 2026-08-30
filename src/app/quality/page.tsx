@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import Nav from '../nav';
 import { getSession } from '@/lib/auth';
+import { formatDay, formatStamp } from '@/lib/format-date';
 import {
   getAutoCreatedEmployees, getDocuments, getMessageOutcomes, getRejections
 } from '@/lib/queries';
@@ -67,7 +68,7 @@ export default async function QualityPage() {
               <tbody>
                 {rejections.map(r => (
                   <tr key={r.id}>
-                    <td className="small">{String(r.loggedAt).slice(0, 16).replace('T', ' ')}</td>
+                    <td className="small">{formatStamp(r.loggedAt)}</td>
                     <td><span className="pill bad">{r.reason}</span></td>
                     <td className="small">{r.detail}</td>
                     <td className="small">{r.raw.date || '—'}</td>
@@ -105,7 +106,7 @@ export default async function QualityPage() {
                 <tbody>
                   {needsReview.map((o, i) => (
                     <tr key={i}>
-                      <td className="small">{o.receivedAt.slice(0, 10)}</td>
+                      <td className="small">{formatDay(o.receivedAt)}</td>
                       <td className="small">{o.sender.slice(0, 40)}</td>
                       <td className="small">{o.subject.slice(0, 60)}</td>
                       <td><span className="pill warn">{LABEL[o.classification]}</span></td>
@@ -135,7 +136,7 @@ export default async function QualityPage() {
                 <tbody>
                   {settled.slice(0, 25).map((o, i) => (
                     <tr key={i}>
-                      <td className="small">{o.receivedAt.slice(0, 10)}</td>
+                      <td className="small">{formatDay(o.receivedAt)}</td>
                       <td className="small">{o.sender.slice(0, 40)}</td>
                       <td className="small">{o.subject.slice(0, 60)}</td>
                       <td className="small muted">{o.evidence}</td>
@@ -197,7 +198,7 @@ export default async function QualityPage() {
             <tbody>
               {documents.map(d => (
                 <tr key={d.reportId}>
-                  <td className="small">{String(d.processedAt).slice(0, 16).replace('T', ' ')}</td>
+                  <td className="small">{formatStamp(d.processedAt)}</td>
                   <td className="small">{d.source}</td>
                   <td className="small">{d.subject}</td>
                   <td className="small">{d.department || '—'}</td>

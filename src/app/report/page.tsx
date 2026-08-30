@@ -3,6 +3,7 @@ import Nav from '../nav';
 import { getSession } from '@/lib/auth';
 import { getLatestReport } from '@/lib/queries';
 import ReportControls from './controls';
+import { formatStamp } from '@/lib/format-date';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,7 +39,7 @@ export default async function ReportPage() {
             <div className="row small muted" style={{ marginBottom: '.6rem' }}>
               <span className="pill mute">{latest.report_type}</span>
               <span>{latest.period_start}{latest.period_end !== latest.period_start ? ` → ${latest.period_end}` : ''}</span>
-              <span>generated {String(latest.generated_at).slice(0, 16).replace('T', ' ')}</span>
+              <span>generated {formatStamp(latest.generated_at)}</span>
               <span className={'pill ' + (latest.status === 'OK_AI' ? 'ok'
                 : latest.status === 'OK_AI_PARTIAL' ? 'warn' : 'mute')}>{latest.status}</span>
               <span>by {latest.generator}</span>
