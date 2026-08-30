@@ -18,6 +18,17 @@
 import type { EngineConfig, Masters, Table } from './types';
 import { extractPipeTables, extractTables, mapHeaderRow } from './html-table';
 
+/**
+ * Bumped whenever this module learns to recognise something it previously
+ * could not. Messages rejected by an older version are re-examined once, so an
+ * improvement reaches the mail that was already in the mailbox rather than
+ * only the mail that arrives next.
+ *
+ *   1  body tables and parsable attachments
+ *   2  Google Sheets links followed via their CSV export
+ */
+export const DETECTOR_VERSION = 2;
+
 export interface DetectionSignal {
   isReport: boolean;
   reason: string;

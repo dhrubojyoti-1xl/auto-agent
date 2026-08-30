@@ -14,7 +14,9 @@
  */
 import { analyze } from './core/analysis';
 import { attachmentToTables, isParsableAttachment } from './core/attachments';
-import { buildGmailQuery, detectInBody, detectInTables } from './core/detect';
+import {
+  buildGmailQuery, detectInBody, detectInTables, DETECTOR_VERSION
+} from './core/detect';
 import { csvToTables } from './core/attachments';
 import { fetchSheetCsv, findSheetLinks } from './core/links';
 import { ingestDocument } from './core/ingest';
@@ -336,10 +338,21 @@ async function recordSkippedAttachments(
   }
 }
 
+/**
+ * Messages that need not be read again.
+ *
+ * Anything that produced data is final — re-reading it could only produce the
+ * same rows, which the fingerprints would reject anyway. Anything judged NOT a
+ * report is only final while the detector that judged it is current: a newer
+ * detector gets one chance to look again at what its predecessor passed over.
+ */
 async function loadSeenMessageIds(ownerUserId: number): Promise<Set<string>> {
   const rows = await query<{ gmail_message_id: string }>(
     `select distinct gmail_message_id from documents
-     where gmail_message_id is not null and owner_user_id = $1`, [ownerUserId]);
+      where gmail_message_id is not null
+        and owner_user_id = $1
+        and (processing_status <> 'NO_DATA' or detector_version >= $2)`,
+    [ownerUserId, DETECTOR_VERSION]);
   return new Set(rows.map(r => r.gmail_message_id));
 }
 
@@ -350,11 +363,15 @@ async function recordNonReport(
     `insert into documents (report_id, document_id, source, subject, sender, sender_domain,
        received_at, processing_status, tables_found, rows_extracted, rows_inserted,
        rows_skipped_idempotent, rows_rejected, error_message, gmail_account_id,
-       gmail_message_id, owner_user_id)
-     values ($1,$2,'email',$3,$4,$5,$6,'NO_DATA',0,0,0,0,0,$7,$8,$9,$10)
-     on conflict (owner_user_id, report_id) do nothing`,
+       gmail_message_id, owner_user_id, detector_version)
+     values ($1,$2,'email',$3,$4,$5,$6,'NO_DATA',0,0,0,0,0,$7,$8,$9,$10,$11)
+     on conflict (owner_user_id, report_id) do update set
+       error_message = excluded.error_message,
+       processed_at = now(),
+       detector_version = excluded.detector_version`,
     [`GM-${msg.id}`, `gmail:${msg.id}`, msg.subject.slice(0, 300), msg.from,
-     senderDomain(msg.from), msg.date, reason, accountId, msg.id, ownerUserId]
+     senderDomain(msg.from), msg.date, reason, accountId, msg.id, ownerUserId,
+     DETECTOR_VERSION]
   );
 }
 
