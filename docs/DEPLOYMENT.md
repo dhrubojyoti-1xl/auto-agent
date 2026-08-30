@@ -15,6 +15,23 @@ because each is a legal or credential action that must not be automated:
 accepting the marketplace terms (or pasting a connection string), and supplying
 an Anthropic key if you want AI commentary. Everything else is scripted.
 
+## Starting clean
+
+Production should contain only real reports. To remove everything ingested so
+far — tasks, documents, data-quality rows, repeat groups, generated reports and
+sync history — while keeping the Gmail connection and the master data:
+
+```bash
+curl -X POST https://<your-app>/api/admin/reset \
+  -b cookies.txt -H 'content-type: application/json' \
+  -d '{"confirm":"DELETE"}'
+```
+
+Scoped to the signed-in user, so it cannot touch another tenant's data, and it
+refuses without the explicit confirm value. It also clears the last-sync marker
+so the next sync re-reads the inbox from scratch rather than skipping messages
+it has already seen.
+
 ## Which project you deploy to
 
 `scripts/configure-production.sh` refuses to configure anything except the
