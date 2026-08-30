@@ -273,11 +273,22 @@ export async function upsertDocument(d: {
   );
 }
 
+/**
+ * Employees the importer met in a report and had to invent a record for.
+ *
+ * They are marked, because an invented employee is derived data wearing
+ * configuration's clothes: its department is a guess taken from whichever
+ * report it first appeared in, and that guess goes on to decide where later
+ * rows are filed. Marking them lets a purge remove them with the data they
+ * came from, and lets the Data quality page show the manager who the
+ * assistant assumed existed.
+ */
 export async function upsertEmployees(employees: Employee[]): Promise<void> {
   for (const e of employees) {
     await query(
-      `insert into employees (employee_id, employee_name, name_aliases, department, active)
-       values ($1,$2,$3,$4,true)
+      `insert into employees (employee_id, employee_name, name_aliases, department,
+                              active, auto_created)
+       values ($1,$2,$3,$4,true,true)
        on conflict (employee_id) do nothing`,
       [e.id, e.name, e.aliases, e.department || null]
     );

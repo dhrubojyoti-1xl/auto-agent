@@ -9,9 +9,11 @@ export const dynamic = 'force-dynamic';
  * Delete this user's operational data so production starts clean.
  *
  * Removes: tasks, ingested documents, data-quality rows, repeat groups,
- * generated reports and sync history.
- * Keeps:   the Gmail connection, the employee/department masters, status and
- *          header aliases — configuration, not data.
+ *          generated reports, sync history, and any employee the importer
+ *          invented — those carry a department guessed from a report that is
+ *          now deleted, and leaving them behind mis-files later reports.
+ * Keeps:   the Gmail connection, configured employees, the department master,
+ *          status and header aliases — configuration, not data.
  *
  * Scoped to the signed-in user, so it can never clear another tenant's data.
  * Requires an explicit {"confirm": "DELETE"} body, because an accidental POST
@@ -38,6 +40,10 @@ export async function POST(req: Request) {
   await query('delete from ai_reports where owner_user_id = $1', [uid]);
   await query('delete from documents where owner_user_id = $1', [uid]);
   await query('delete from sync_runs where owner_user_id = $1', [uid]);
+  // Employees the importer invented, now that the reports they came from are
+  // gone. Configured employees are untouched.
+  const wiped = await query<{ employee_id: string }>(
+    `delete from employees where auto_created returning employee_id`);
 
   // Forget which Gmail messages were seen, so a fresh sync re-reads the inbox
   // rather than skipping everything as already-processed.
@@ -45,7 +51,11 @@ export async function POST(req: Request) {
     `update gmail_accounts set last_sync_at = null, last_sync_status = null,
        last_sync_message = null where owner_user_id = $1`, [uid]);
 
-  return NextResponse.json({ ok: true, deleted: before, remaining: await counts(uid) });
+  return NextResponse.json({
+    ok: true,
+    deleted: { ...before, autoCreatedEmployees: wiped.length },
+    remaining: await counts(uid)
+  });
 }
 
 async function counts(uid: number) {

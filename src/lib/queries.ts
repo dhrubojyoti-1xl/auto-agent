@@ -354,3 +354,28 @@ export async function getSlowTaskChart(
     actual: Number(r.actual_duration)
   }));
 }
+
+/**
+ * Employees the importer invented because a report named someone who was not
+ * in the roster. Their department is a guess from the first report they
+ * appeared in, and that guess decides where later rows without a department
+ * column are filed — so it is shown, not hidden.
+ */
+export async function getAutoCreatedEmployees(ownerUserId: number) {
+  const rows = await query<Record<string, string | number>>(
+    `select e.employee_id, e.employee_name, e.department,
+            count(t.task_id)::int as tasks,
+            min(t.task_date) as first_seen, max(t.task_date) as last_seen
+     from employees e
+     left join tasks t on t.employee_name = e.employee_name
+                      and t.owner_user_id = $1
+     where e.auto_created
+     group by e.employee_id, e.employee_name, e.department
+     order by count(t.task_id) desc, e.employee_name`, [ownerUserId]);
+  return rows.map(r => ({
+    id: String(r.employee_id), name: String(r.employee_name),
+    department: String(r.department ?? ''), tasks: Number(r.tasks),
+    firstSeen: r.first_seen ? String(r.first_seen) : '',
+    lastSeen: r.last_seen ? String(r.last_seen) : ''
+  }));
+}
