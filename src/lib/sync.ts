@@ -215,6 +215,13 @@ async function documentsFromMessage(
 ): Promise<SourceDocument[]> {
   const docs: SourceDocument[] = [];
 
+  // Plain text is preferred; HTML is stripped to text so a covering sentence
+  // wrapped in markup still reads as a sentence.
+  const contextText = [
+    msg.text || '',
+    (msg.html || '').replace(/<[^>]+>/g, ' ')
+  ].join(' ').replace(/\s+/g, ' ').trim().slice(0, 2000);
+
   const body = detectInBody(msg.html, msg.text, masters, cfg);
   bodySignal.reason = body.reason;
   bodySignal.confidence = confidenceFor(body);
@@ -222,7 +229,8 @@ async function documentsFromMessage(
     docs.push({
       documentId: `gmail:${msg.id}`,
       subject: msg.subject, sender: msg.from, receivedAt: msg.date,
-      html: msg.html || undefined, text: msg.text || undefined
+      html: msg.html || undefined, text: msg.text || undefined,
+      contextText
     });
   }
 
@@ -234,15 +242,16 @@ async function documentsFromMessage(
       if (isUnreadableDocumentAttachment(att.filename, att.mimeType)) {
         skipped.push({
           filename: att.filename, reason: 'ATTACHMENT_FORMAT_UNSUPPORTED',
-          detail: `${att.filename} is a document format this system cannot read. ` +
-                  `Send the report as a spreadsheet (.xlsx or .csv), as a table in the ` +
-                  `email itself, or as a shared Google Sheet link.`
+          detail: `A report was detected in a format this system does not read: ` +
+                  `${att.filename}. Send it as a spreadsheet (.xlsx or .csv), as a table ` +
+                  `in the email itself, or as a shared Google Sheet link.`
         });
       } else if (looksLikeReportImage(att.filename, att.mimeType, att.size)) {
         skipped.push({
           filename: att.filename, reason: 'IMAGE_REVIEW_REQUIRED',
-          detail: `${att.filename} may be a screenshot of a report. Images are not read ` +
-                  `automatically — the figures would have to be guessed from pixels. ` +
+          detail: `A report may have been sent as a screenshot: ${att.filename}. Images ` +
+                  `are not read automatically, because the figures would have to be ` +
+                  `guessed from pixels and a management report cannot rest on that. ` +
                   `Send the underlying spreadsheet, or paste the table into the email.`
         });
       }
@@ -267,8 +276,9 @@ async function documentsFromMessage(
       if (!tables.length) {
         skipped.push({
           filename: att.filename, reason: 'ATTACHMENT_UNREADABLE',
-          detail: `${att.filename} could not be read as a spreadsheet or delimited file. ` +
-                  `It may be corrupted, password-protected, or an old .xls workbook.`
+          detail: `A file that should hold a report could not be read: ${att.filename}. ` +
+                  `It may be corrupted, password-protected, or an old .xls workbook. ` +
+                  `Re-send it as .xlsx or .csv.`
         });
         continue;
       }
@@ -284,7 +294,10 @@ async function documentsFromMessage(
         documentId: `gmail:${msg.id}:${att.filename}`,
         subject: `${msg.subject} [${att.filename}]`,
         sender: msg.from, receivedAt: msg.date,
-        tables, attachmentName: att.filename
+        tables, attachmentName: att.filename,
+        // The covering sentence belongs to the attachment too: it is where the
+        // department and the reporting day are usually stated.
+        contextText
       });
     } catch (e) {
       skipped.push({
@@ -305,7 +318,11 @@ async function documentsFromMessage(
       if (!got.ok) {
         skipped.push({
           filename: `Google Sheet ${link.id.slice(0, 12)}…`,
-          reason: `SHEET_${got.reason}`, detail: got.detail
+          // Named so the outcome reads as "the report is there and we cannot
+          // reach it", never as "there was nothing here".
+          reason: got.reason === 'NOT_SHARED'
+            ? 'GOOGLE_SHEET_ACCESS_REQUIRED' : `SHEET_${got.reason}`,
+          detail: got.detail
         });
         continue;
       }
@@ -335,7 +352,8 @@ async function documentsFromMessage(
         documentId: `gmail:${msg.id}:sheet:${link.id}${link.gid ? ':' + link.gid : ''}`,
         subject: `${msg.subject} [Google Sheet]`,
         sender: msg.from, receivedAt: msg.date,
-        tables, attachmentName: `Google Sheet ${link.id.slice(0, 12)}…`
+        tables, attachmentName: `Google Sheet ${link.id.slice(0, 12)}…`,
+        contextText
       });
     }
   }
@@ -365,7 +383,7 @@ function classifyUnprocessed(
   if (reasons.includes('IMAGE_REVIEW_REQUIRED')) {
     return { classification: 'REVIEW_REQUIRED', evidence: details };
   }
-  if (reasons.some(r => r === 'SHEET_NOT_SHARED' || r === 'SHEET_FAILED')) {
+  if (reasons.some(r => r === 'GOOGLE_SHEET_ACCESS_REQUIRED' || r === 'SHEET_FAILED')) {
     return { classification: 'REVIEW_REQUIRED', evidence: details };
   }
   if (reasons.includes('ATTACHMENT_FORMAT_UNSUPPORTED')) {

@@ -177,7 +177,9 @@ describe('the product does not claim a schedule it does not keep', () => {
       const claims = text.match(/every hour|hourly/gi) || [];
       // The only permitted mention is the note that hourly needs a paid plan.
       for (const c of claims) {
-        expect(text, `${page}: "${c}"`).toMatch(/hourly needs a Vercel Pro plan/);
+        // The only permitted mention is the note that hourly needs a paid
+        // plan; case is not the point, the claim is.
+        expect(text, `${page}: "${c}"`).toMatch(/hourly needs a Vercel Pro plan/i);
       }
     }
   });

@@ -21,7 +21,13 @@ export type Field =
   | 'completionTime' | 'expectedDuration' | 'actualDuration' | 'link' | 'notes';
 
 export interface Cell { text: string; href: string }
-export interface Table { index: number; rows: Cell[][]; source: 'html' | 'text' }
+export interface Table {
+  index: number;
+  rows: Cell[][];
+  source: 'html' | 'text';
+  /** Worksheet name, when the table came from a workbook. Evidence for the department. */
+  sheetName?: string;
+}
 export interface HeaderMap {
   headerRowIndex: number;
   mapping: Partial<Record<Field, number>>;
@@ -163,6 +169,15 @@ export interface SourceDocument {
   tables?: Table[];
   /** Filename when this document is an attachment rather than a body. */
   attachmentName?: string;
+  /**
+   * The covering text of the email this document came from.
+   *
+   * A spreadsheet arrives with a sentence — "Sales team update for yesterday"
+   * — and that sentence is often the only statement of which department the
+   * report is for and which day it covers. Carrying it onto the attachment
+   * keeps the two halves of one report together.
+   */
+  contextText?: string;
 }
 
 export interface IngestResult {

@@ -10,6 +10,7 @@
  *   HONEST      Nothing is invented: no guessed dates, durations, employees or
  *               departments.
  */
+import { departmentFromEvidence, inferReportDate } from './evidence';
 import { workKindFromHeader } from './semantic-headers';
 import type {
   Cell, EngineConfig, Employee, Field, IngestResult, Masters, RejectedRow,
@@ -108,6 +109,10 @@ function buildTaskRecord(
   raw: Record<string, string>,
   ctx: {
     reportId: string; documentId: string; receivedAt: string; departmentHint: string;
+    /** The day the covering text said the report covers, when a row omits one. */
+    reportDate: string;
+    /** The words that date was read from, recorded on the row. */
+    reportDateQuote: string;
     /**
      * Who sent the report, used only when the table has no employee column at
      * all. A blank cell in a table that HAS one is a malformed row and is
@@ -124,9 +129,24 @@ function buildTaskRecord(
   const problems: string[] = [];
 
   // --- Date (required) ---
-  const rawDate = cleanWhitespace(raw.date);
-  if (!rawDate) return { ok: false, reason: 'MISSING_REQUIRED_FIELD', detail: 'Date is empty' };
+  // A row without its own date falls back to the day the covering text stated,
+  // and only that: with nothing stated the row is refused rather than stamped
+  // with whenever the email happened to arrive.
+  const ownDate = cleanWhitespace(raw.date);
+  const rawDate = ownDate || ctx.reportDate || '';
+  if (!rawDate) {
+    return {
+      ok: false, reason: 'MISSING_REQUIRED_FIELD',
+      detail: 'Date is empty, and the email says nothing about which day the report covers'
+    };
+  }
+  const dateFromContext = !ownDate;
   const date = parseDate(rawDate, cfg.dateOrder);
+  if (dateFromContext && date) {
+    // Visible on the row, because a date the sender never wrote in the table is
+    // an inference and should be inspectable as one.
+    problems.push(`Date taken from the email — ${ctx.reportDateQuote}`);
+  }
   if (!date) {
     return {
       ok: false, reason: 'INVALID_DATE',
@@ -317,12 +337,27 @@ export function ingestDocument(
     };
   }
 
-  // 3. Department hint from subject / sender — existing departments only
+  // 3. Department and reporting date from everything except the rows.
+  //
+  // A spreadsheet arrives with a covering sentence, and that sentence is
+  // routinely the only statement of which department the report is for and
+  // which day it covers — the columns do not repeat what the sender already
+  // said. Reading only the subject threw that away.
   const addr = (doc.sender.match(/<([^>]+)>/)?.[1] || doc.sender || '').toLowerCase().trim();
   const domain = addr.includes('@') ? addr.split('@')[1] : '';
+  const deptEvidence = departmentFromEvidence({
+    subject: doc.subject, body: doc.contextText,
+    attachmentName: doc.attachmentName,
+    sheetName: reportTables[0]?.table.sheetName
+  }, masters, cfg);
   const departmentHint =
-    findDepartmentInText(doc.subject, masters, cfg) ||
+    deptEvidence?.department ||
     departmentFromSender(domain, doc.sender, masters) || '';
+
+  // The day the report is about, when its rows do not say. Never the arrival
+  // date on its own: a Monday email about Friday's work is not Monday's work.
+  const dateEvidence = inferReportDate(
+    { subject: doc.subject, body: doc.contextText, receivedAt: doc.receivedAt }, cfg);
 
   // The sender as a person: "Dhrubo Ganguly <d@x.com>" -> "Dhrubo Ganguly",
   // and a bare address falls back to its local part.
@@ -343,7 +378,10 @@ export function ingestDocument(
       const res = buildTaskRecord(
         raw,
         { reportId, documentId: doc.documentId, receivedAt: doc.receivedAt,
-          departmentHint, tableIndex: tIdx, rowIndex: r,
+          departmentHint,
+          reportDate: dateEvidence?.date || '',
+          reportDateQuote: dateEvidence?.quote || '',
+          tableIndex: tIdx, rowIndex: r,
           workKind: workKindFor(rt.header, rt.table.rows),
           // Only when this table has no employee column of its own.
           senderEmployee: 'employee' in rt.header.mapping ? '' : senderName },

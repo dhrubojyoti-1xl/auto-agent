@@ -102,8 +102,9 @@ export async function fetchSheetCsv(
     if (!res.ok || !type.includes('text/csv')) {
       return {
         ok: false, reason: 'NOT_SHARED',
-        detail: `The Google Sheet at ${link.url} could not be opened. Set its sharing ` +
-                `to "Anyone with the link can view", or attach the file to the email.`
+        detail: `A report was detected as a Google Sheet, and the sheet cannot be read. ` +
+                `Set its sharing to "Anyone with the link can view", or attach the file ` +
+                `to the email. ${link.url}`
       };
     }
 
@@ -176,8 +177,9 @@ async function fetchWorkbook(
     if (!res.ok || !/spreadsheetml|octet-stream|excel/.test(type)) {
       return {
         ok: false, reason: 'NOT_SHARED',
-        detail: `The Google Sheet at ${link.url} could not be opened. Set its sharing ` +
-                `to "Anyone with the link can view", or attach the file to the email.`
+        detail: `A report was detected as a Google Sheet, and the sheet cannot be read. ` +
+                `Set its sharing to "Anyone with the link can view", or attach the file ` +
+                `to the email. ${link.url}`
       };
     }
     const buf = Buffer.from(await res.arrayBuffer());

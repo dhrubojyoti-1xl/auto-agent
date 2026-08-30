@@ -229,10 +229,15 @@ d('the whole message, end to end', () => {
   it('reports the sheet it could not open, by name and with the fix', async () => {
     const rows = await db.query(
       `select rejection_reason, rejection_detail from data_quality
-       where owner_user_id = $1 and rejection_reason like 'SHEET%'`, [uid]);
+       where owner_user_id = $1
+         and (rejection_reason like 'SHEET%'
+              or rejection_reason = 'GOOGLE_SHEET_ACCESS_REQUIRED')`, [uid]);
     expect(rows).toHaveLength(1);
-    expect(rows[0].rejection_reason).toBe('SHEET_NOT_SHARED');
+    expect(rows[0].rejection_reason).toBe('GOOGLE_SHEET_ACCESS_REQUIRED');
     expect(rows[0].rejection_detail).toMatch(/Anyone with the link/);
+    // It must read as "the report is there and cannot be reached", never as
+    // "there was nothing here".
+    expect(rows[0].rejection_detail).toMatch(/report was detected/i);
   });
 
   it('does not import the same sheet again on the next sync', async () => {

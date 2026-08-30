@@ -159,7 +159,7 @@ export async function xlsxToTables(buffer: Buffer): Promise<Table[]> {
       for (let i = 0; i < cells.length; i++) if (!cells[i]) cells[i] = { text: '', href: '' };
       if (cells.some(x => x.text)) rows.push(cells);
     });
-    if (rows.length >= 2) tables.push({ index: tables.length, source: 'text', rows });
+    if (rows.length >= 2) tables.push({ index: tables.length, source: 'text', rows, sheetName: sheet.name });
   });
   return tables;
 }

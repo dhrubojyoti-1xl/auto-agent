@@ -3,12 +3,28 @@ import Nav from '../nav';
 import { getSession } from '@/lib/auth';
 import { listGmailAccounts, listSyncRuns } from '@/lib/accounts';
 import { getKpis, getRejections } from '@/lib/queries';
+import { getCoverage } from '@/lib/analytics';
 import { googleConfigured } from '@/lib/google-oauth';
 import { query } from '@/lib/db';
 import { safeErrorMessage } from '@/lib/safe-error';
 import { formatStamp } from '@/lib/format-date';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * When the scheduled check next runs, in the manager's terms.
+ *
+ * The cron fires at 03:00 UTC daily, so "next run" is either later today or
+ * tomorrow. Computed rather than stated, because a fixed sentence goes stale
+ * the moment somebody reads it at 04:00.
+ */
+function nextScheduledSync(): string {
+  const now = new Date();
+  const next = new Date(Date.UTC(
+    now.getUTCFullYear(), now.getUTCMonth(),
+    now.getUTCDate() + (now.getUTCHours() >= 3 ? 1 : 0), 3, 0, 0));
+  return `${next.toISOString().slice(0, 10)} 03:00 UTC`;
+}
 
 /** PHASE 24 — everything an operator needs to trust the pipeline, in one place. */
 export default async function SyncHealthPage() {
@@ -20,13 +36,15 @@ export default async function SyncHealthPage() {
   let runs: Awaited<ReturnType<typeof listSyncRuns>> = [];
   let kpis = null, rejects: Awaited<ReturnType<typeof getRejections>> = [];
   let docStats: { status: string; n: number }[] = [];
+  let coverage: Awaited<ReturnType<typeof getCoverage>> | null = null;
   let dbError = '';
   try {
-    [inboxes, runs, kpis, rejects, docStats] = await Promise.all([
+    [inboxes, runs, kpis, rejects, docStats, coverage] = await Promise.all([
       listGmailAccounts(uid), listSyncRuns(uid, 25), getKpis(uid), getRejections(uid),
       query<{ status: string; n: number }>(
         `select processing_status as status, count(*)::int as n from documents
-         where owner_user_id = $1 group by 1 order by 1`, [uid])
+         where owner_user_id = $1 group by 1 order by 1`, [uid]),
+      getCoverage(uid)
     ]);
   } catch (e) { dbError = safeErrorMessage(e); }
 
@@ -74,8 +92,10 @@ export default async function SyncHealthPage() {
                    value={formatStamp(lastRun?.startedAt, 'never')}
                    note={lastRun ? `(${lastRun.trigger})` : ''} />
               <Row label="Sync status" value={lastRun ? lastRun.status : '—'} />
-              <Row label="Automatic schedule" value="daily"
-                   note="— plus Sync now; hourly needs a Vercel Pro plan" />
+              <Row label="Last successful sync"
+                   value={formatStamp(runs.find(r => r.status === 'OK')?.startedAt, 'never')} />
+              <Row label="Automatic schedule" value="daily at 03:00 UTC"
+                   note={`— next run ${nextScheduledSync()}; plus Sync now. Hourly needs a Vercel Pro plan`} />
               <Row label="AI commentary"
                    value={process.env.ANTHROPIC_API_KEY ? 'configured' : 'not configured'}
                    note={process.env.ANTHROPIC_API_KEY
@@ -101,6 +121,34 @@ export default async function SyncHealthPage() {
             <a className="btn secondary" href="/api/export?format=csv">Download tasks (CSV)</a>
           </div>
         </div>
+
+        {coverage && (
+          <>
+            <h2>Reporting coverage</h2>
+            <p className="small muted">
+              The same figures the dashboard uses. &ldquo;Detected&rdquo; means a report was
+              recognised; &ldquo;processed&rdquo; means it became tasks.
+            </p>
+            <div className="kpis secondary">
+              <div className="kpi"><div className="label">Messages read</div>
+                <div className="value">{coverage.messagesScanned}</div></div>
+              <div className="kpi"><div className="label">Reports detected</div>
+                <div className="value">{coverage.reportsDetected}</div></div>
+              <div className="kpi"><div className="label">Reports processed</div>
+                <div className="value">{coverage.reportsProcessed}</div></div>
+              <div className="kpi"><div className="label">Needing review</div>
+                <div className="value">{coverage.reportsNeedingReview}</div></div>
+              <div className="kpi"><div className="label">Rows imported</div>
+                <div className="value">{coverage.rowsImported}</div></div>
+              <div className="kpi"><div className="label">Rows rejected</div>
+                <div className="value">{coverage.rowsRejected}</div></div>
+              <div className="kpi"><div className="label">Duplicates blocked</div>
+                <div className="value">{coverage.duplicatesBlocked}</div></div>
+              <div className="kpi"><div className="label">Not reports</div>
+                <div className="value">{coverage.messagesIgnored}</div></div>
+            </div>
+          </>
+        )}
 
         <h2>Throughput (last {runs.length} run{runs.length === 1 ? '' : 's'})</h2>
         <div className="kpis">
