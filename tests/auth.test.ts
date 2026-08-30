@@ -106,3 +106,36 @@ describe('middleware public paths', () => {
     expect(existsSync(new URL('../middleware.ts', import.meta.url))).toBe(false);
   });
 });
+
+describe('the public health endpoint leaks nothing about the tenants', () => {
+  const source = require('fs').readFileSync(
+    require('path').join(process.cwd(), 'src/app/api/health/route.ts'), 'utf8') as string;
+
+  it('scopes every activity query to the signed-in user', () => {
+    // Any select touching per-user data must be behind a session and filtered.
+    const selects = [...source.matchAll(/`(select[\s\S]*?)`/gi)].map(m => m[1]);
+    for (const sql of selects) {
+      if (/from (tasks|sync_runs|gmail_accounts|documents|data_quality)\b/i.test(sql)) {
+        expect(sql, sql.slice(0, 50)).toMatch(/owner_user_id = \$1/);
+      }
+    }
+  });
+
+  it('gates the counters on a session rather than returning them to anyone', () => {
+    // Every per-user figure has to be written after a session check, never
+    // unconditionally at the top of the handler.
+    const firstGate = source.indexOf('if (session)');
+    expect(firstGate).toBeGreaterThan(-1);
+    for (const marker of ['checks.syncRuns', 'checks.emailsScanned',
+                          'checks.connectedInboxes', 'checks.tasks']) {
+      const at = source.indexOf(marker);
+      expect(at, marker).toBeGreaterThan(firstGate);
+    }
+  });
+
+  it('still reports configuration and reachability without a session', () => {
+    for (const key of ['database', 'googleOauth', 'tokenEncryption', 'commit']) {
+      expect(source).toContain(`checks.${key}`);
+    }
+  });
+});

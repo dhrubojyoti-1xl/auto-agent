@@ -1,16 +1,30 @@
 import { NextResponse } from 'next/server';
+import { getSession } from '@/lib/auth';
 import { connectionStyle, query } from '@/lib/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/** Public, but deliberately says nothing an attacker can use. */
+/**
+ * Public, and deliberately says nothing an anonymous caller can use.
+ *
+ * An uptime check needs to know that the database answers and that the
+ * deployment is configured; it does not need to know how much mail this
+ * organisation processes. The activity counters are per-user data and are
+ * returned only to a signed-in session — the Sync health page shows the same
+ * figures scoped to whoever is looking at them.
+ */
 export async function GET() {
+  const session = await getSession().catch(() => null);
   const checks: Record<string, string> = {};
   try {
-    const rows = await query<{ count: number }>('select count(*)::int as count from tasks');
+    const rows = session
+      ? await query<{ count: number }>(
+          'select count(*)::int as count from tasks where owner_user_id = $1',
+          [session.userId])
+      : await query<{ count: number }>('select 0::int as count');
     checks.database = 'ok';
-    checks.tasks = String(rows[0].count);
+    if (session) checks.tasks = String(rows[0].count);
     checks.connection = connectionStyle();
     if (checks.connection === 'direct') {
       checks.connectionNote =
@@ -27,7 +41,7 @@ export async function GET() {
   checks.deployedAt = process.env.VERCEL_DEPLOYMENT_ID ? 'vercel' : 'local';
   checks.region = process.env.VERCEL_REGION || 'local';
 
-  try {
+  if (session) try {
     const [s] = await query<{
       last_ok: string | null; last_fail: string | null; runs: number;
       scanned: number; reports: number; imported: number; rejected: number;
@@ -41,7 +55,7 @@ export async function GET() {
               coalesce(sum(rows_imported),0)::int    as imported,
               coalesce(sum(rows_rejected),0)::int    as rejected,
               coalesce(sum(rows_duplicate),0)::int   as duplicates
-       from sync_runs`);
+       from sync_runs where owner_user_id = $1`, [session.userId]);
     checks.lastSuccessfulSync = s?.last_ok ? String(s.last_ok).slice(0, 19).replace('T', ' ') : 'never';
     checks.lastFailedSync = s?.last_fail ? String(s.last_fail).slice(0, 19).replace('T', ' ') : 'never';
     checks.syncRuns = String(s?.runs ?? 0);
@@ -60,10 +74,10 @@ export async function GET() {
     ? 'configured' : 'MISSING';
   checks.tokenEncryption = process.env.TOKEN_ENCRYPTION_KEY ? 'configured' : 'MISSING';
   checks.cronSecret = process.env.CRON_SECRET ? 'configured' : 'MISSING';
-  try {
-    const acc = await query<{ count: number; connected: string | null }>(
-      `select count(*)::int as count, max(email) as connected
-       from gmail_accounts where active`);
+  if (session) try {
+    const acc = await query<{ count: number }>(
+      `select count(*)::int as count from gmail_accounts
+       where active and owner_user_id = $1`, [session.userId]);
     checks.connectedInboxes = String(acc[0].count);
   } catch { checks.connectedInboxes = 'unknown'; }
 
