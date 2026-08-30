@@ -35,15 +35,11 @@ export default async function SyncHealthPage() {
   let inboxes: Awaited<ReturnType<typeof listGmailAccounts>> = [];
   let runs: Awaited<ReturnType<typeof listSyncRuns>> = [];
   let kpis = null, rejects: Awaited<ReturnType<typeof getRejections>> = [];
-  let docStats: { status: string; n: number }[] = [];
   let coverage: Awaited<ReturnType<typeof getCoverage>> | null = null;
   let dbError = '';
   try {
-    [inboxes, runs, kpis, rejects, docStats, coverage] = await Promise.all([
+    [inboxes, runs, kpis, rejects, coverage] = await Promise.all([
       listGmailAccounts(uid), listSyncRuns(uid, 25), getKpis(uid), getRejections(uid),
-      query<{ status: string; n: number }>(
-        `select processing_status as status, count(*)::int as n from documents
-         where owner_user_id = $1 group by 1 order by 1`, [uid]),
       getCoverage(uid)
     ]);
   } catch (e) { dbError = safeErrorMessage(e); }
@@ -61,10 +57,11 @@ export default async function SyncHealthPage() {
     runs.slice(0, 3).some(r => r.status === 'GMAIL_AUTH_ERROR' ||
                                r.status === 'REAUTH_REQUIRED');
   const lastError = runs.find(r => r.errorMessage)?.errorMessage || '';
-  const processed = docStats.filter(d => d.status !== 'NO_DATA')
-    .reduce((n, d) => n + d.n, 0);
-  const ignored = docStats.find(d => d.status === 'NO_DATA')?.n || 0;
-  const failed = docStats.find(d => d.status === 'FAILED')?.n || 0;
+  // Every one of these comes from the analytics module, so this page cannot
+  // disagree with the dashboard about what happened.
+  const processed = coverage?.reportsDetected ?? 0;
+  const ignored = coverage?.messagesIgnored ?? 0;
+  const failed = coverage?.reportsNeedingReview ?? 0;
 
   function Row({ label, value, note }: { label: string; value: string | number; note?: string }) {
     return (
