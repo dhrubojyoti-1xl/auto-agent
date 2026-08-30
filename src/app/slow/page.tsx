@@ -15,8 +15,11 @@ export default async function SlowPage() {
       <main className="shell">
         <h1>Slow tasks</h1>
         <p className="sub">
-          A task is only shown here when BOTH an expected and an actual duration exist and the
-          actual exceeds the expectation by more than the configured multiplier.
+          A task appears here when its actual duration exceeds the expected duration by more
+          than the configured multiplier. &ldquo;Expected&rdquo; is whatever was configured for
+          the task category — or, when nothing was configured, the median of comparable history
+          (the same task, then category, then department), requiring at least three observations
+          before any median is trusted. The <strong>Baseline from</strong> column says which.
         </p>
 
         <div className="banner warn">
@@ -36,7 +39,7 @@ export default async function SlowPage() {
                   <th>Date</th><th>Task</th><th>Employee</th><th>Department</th>
                   <th>Category</th><th className="num">Expected</th><th className="num">Actual</th>
                   <th className="num">Variance</th><th className="num">Over by</th>
-                  <th>Basis</th><th>Status</th>
+                  <th>Baseline from</th><th>Why</th><th>Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -55,7 +58,13 @@ export default async function SlowPage() {
                         {r.variancePct}%
                       </span>
                     </td>
-                    <td className="small muted">{r.basis}</td>
+                    <td className="small">
+                      <span className="pill mute">{r.baselineSource}</span>
+                      {r.baselineSample > 0 && (
+                        <div className="small muted">n={r.baselineSample}</div>
+                      )}
+                    </td>
+                    <td className="small muted">{r.reason}</td>
                     <td className="small">{r.status}</td>
                   </tr>
                 ))}

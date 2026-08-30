@@ -210,11 +210,44 @@ export function normalizeTask(raw: unknown): string {
     .trim();
 }
 
+/**
+ * Light suffix stemming. Deliberately conservative — it folds the inflections
+ * that actually appear in task text ("updating"/"updated"/"updates" ->
+ * "update", "reports" -> "report") and nothing more. A full stemmer would
+ * merge words that mean different things, which matters here because merging
+ * two genuinely different tasks silently misreports someone's work.
+ */
+export function stemToken(t: string): string {
+  if (t.length <= 4) return t;
+  let base = t;
+  for (const [suffix, min] of [['ing', 5], ['ies', 5], ['ed', 4], ['es', 4], ['s', 4]] as const) {
+    if (t.endsWith(suffix) && t.length > min) {
+      base = t.slice(0, -suffix.length);
+      if (suffix === 'ies') base += 'y';
+      // Doubled-consonant reduction applies to -ing/-ed only ("planned" ->
+      // "plan"). Applying it after a plural -s turns "calls" into "cal" while
+      // "call" stays "call", so the two stop matching.
+      if ((suffix === 'ing' || suffix === 'ed') && base.length > 3 &&
+          base[base.length - 1] === base[base.length - 2]) {
+        base = base.slice(0, -1);
+      }
+      break;
+    }
+  }
+  // Drop a trailing "e" from every stem so the inflected and base forms meet:
+  // "update" -> "updat" and "updating" -> "updat" must agree, or the two are
+  // treated as unrelated work.
+  if (base.length > 3 && base.endsWith('e')) base = base.slice(0, -1);
+  return base;
+}
+
 export function taskTokens(normalized: string): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  normalized.split(' ').forEach(t => {
-    if (!t || TASK_STOPWORDS.has(t) || t.length < 2) return;
+  normalized.split(' ').forEach(raw => {
+    if (!raw || TASK_STOPWORDS.has(raw) || raw.length < 2) return;
+    const t = stemToken(raw);
+    if (!t || TASK_STOPWORDS.has(t)) return;
     if (!seen.has(t)) { seen.add(t); out.push(t); }
   });
   return out.sort();
@@ -226,6 +259,33 @@ export function tokenSimilarity(a: string[], b: string[]): number {
   const setB = new Set(b);
   const inter = a.filter(t => setB.has(t)).length;
   return inter / (a.length + b.length - inter);
+}
+
+/**
+ * Containment: is every meaningful word of the shorter task present in the
+ * longer one? "Update website" vs "Update website content" is the same
+ * recurring job described with more detail, but Jaccard scores it 0.67 and
+ * misses it.
+ *
+ * Guarded so it cannot over-merge:
+ *   - the shorter task must carry at least two meaningful words, so a
+ *     one-word task like "Reporting" does not swallow everything containing it
+ *   - the longer task may add at most two words, so "Client call" does not
+ *     absorb "Client call escalation follow up with legal"
+ * "Update website" vs "Update CRM" is not a subset either way, so it is
+ * untouched.
+ */
+export function tokenContainment(a: string[], b: string[]): boolean {
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  if (short.length < 2) return false;
+  if (long.length - short.length > 2) return false;
+  const set = new Set(long);
+  return short.every(t => set.has(t));
+}
+
+/** The similarity decision used by repeat detection. */
+export function tasksAreSimilar(a: string[], b: string[], threshold: number): boolean {
+  return tokenSimilarity(a, b) >= threshold || tokenContainment(a, b);
 }
 
 /* --------------------------------------------------------------------------

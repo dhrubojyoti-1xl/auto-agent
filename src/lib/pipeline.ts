@@ -122,7 +122,8 @@ export async function rebuildAnalysis(
     analysis.repeatByTaskId as Map<string, string>,
     analysis.slowFlagByTaskId as Map<string, string>,
     analysis.varianceByTaskId,
-    ownerUserId
+    ownerUserId,
+    analysis.slowDetailByTaskId
   );
   await replaceRepeatGroups(analysis.repeatGroups, ownerUserId);
   return {

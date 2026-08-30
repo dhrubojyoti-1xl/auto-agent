@@ -285,11 +285,14 @@ export async function upsertEmployees(employees: Employee[]): Promise<void> {
 }
 
 /** Writes the analysis flags back onto the task rows, in one statement each. */
+export interface SlowDetail { source: string; sample: number; reason: string; expected: number }
+
 export async function writeAnalysisFlags(
   repeat: Map<string, string>,
   slowFlag: Map<string, string>,
   variance: Map<string, number | null>,
-  ownerUserId: number
+  ownerUserId: number,
+  slowDetail: Map<string, SlowDetail> = new Map()
 ): Promise<void> {
   const ids = [...slowFlag.keys()];
   if (!ids.length) return;
@@ -298,20 +301,34 @@ export async function writeAnalysisFlags(
        repeated_task_flag = v.repeated,
        repeat_classification = nullif(v.classification, ''),
        slow_task_flag = v.slow_flag,
-       slow_variance_hours = v.variance
+       slow_variance_hours = v.variance,
+       slow_baseline_source = nullif(v.baseline_source, ''),
+       slow_baseline_sample = nullif(v.baseline_sample, 0),
+       slow_reason = nullif(v.reason, ''),
+       -- A learned baseline is shown as the expectation, so the dashboard and
+       -- the stored row cannot disagree about what "expected" meant.
+       expected_duration = coalesce(t.expected_duration, nullif(v.expected, 0))
      from (
        select unnest($1::text[]) as task_id,
               unnest($2::boolean[]) as repeated,
               unnest($3::text[]) as classification,
               unnest($4::text[]) as slow_flag,
-              unnest($5::numeric[]) as variance
+              unnest($5::numeric[]) as variance,
+              unnest($7::text[]) as baseline_source,
+              unnest($8::int[]) as baseline_sample,
+              unnest($9::text[]) as reason,
+              unnest($10::numeric[]) as expected
      ) v
      where t.task_id = v.task_id and t.owner_user_id = $6`,
     [ids,
      ids.map(id => repeat.has(id)),
      ids.map(id => repeat.get(id) ?? ''),
      ids.map(id => slowFlag.get(id) ?? 'INSUFFICIENT_DATA'),
-     ids.map(id => variance.get(id) ?? null), ownerUserId]
+     ids.map(id => variance.get(id) ?? null), ownerUserId,
+     ids.map(id => slowDetail.get(id)?.source ?? ''),
+     ids.map(id => slowDetail.get(id)?.sample ?? 0),
+     ids.map(id => slowDetail.get(id)?.reason ?? ''),
+     ids.map(id => slowDetail.get(id)?.expected ?? 0)]
   );
 }
 

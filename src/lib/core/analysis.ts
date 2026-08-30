@@ -8,7 +8,7 @@
 import type {
   EngineConfig, RepeatClassification, SlowFlag, TaskRecord
 } from './types';
-import { addDays, keyify, normalizeTask, pct, taskTokens, tokenSimilarity, shortHash } from './normalize';
+import { addDays, keyify, normalizeTask, pct, taskTokens, tasksAreSimilar, shortHash } from './normalize';
 
 export interface RepeatGroup {
   repeatKey: string;
@@ -29,6 +29,12 @@ export interface RepeatGroup {
   taskIds: string[];
 }
 
+export type BaselineSource =
+  | 'configured'          // an expectation someone actually set
+  | 'task history'        // median of the same task, historically
+  | 'category history'    // median of the same task category
+  | 'department history'; // median for the department
+
 export interface SlowTask {
   taskId: string;
   date: string;
@@ -42,9 +48,16 @@ export interface SlowTask {
   varianceHours: number;
   variancePct: number;
   durationBasis: string;
+  /** Where "expected" came from, and how many observations backed it. */
+  baselineSource: BaselineSource;
+  baselineSampleSize: number;
+  reason: string;
 }
 
+export interface SlowDetail { source: string; sample: number; reason: string; expected: number }
+
 export interface AnalysisResult {
+  slowDetailByTaskId: Map<string, SlowDetail>;
   repeatGroups: RepeatGroup[];
   /** taskId -> classification, for the rows that belong to a group of >= 2 */
   repeatByTaskId: Map<string, RepeatClassification>;
@@ -108,7 +121,7 @@ export function analyzeRepeatedTasks(tasks: TaskRecord[], cfg: EngineConfig): {
     const canon: string[] = [];
     ordered.forEach(k => {
       for (const c of canon) {
-        if (tokenSimilarity(buckets.get(k)!.tokens, buckets.get(c)!.tokens) >= cfg.similarityThreshold) {
+        if (tasksAreSimilar(buckets.get(k)!.tokens, buckets.get(c)!.tokens, cfg.similarityThreshold)) {
           canonicalOf.set(k, c);
           return;
         }
@@ -193,23 +206,94 @@ export function analyzeRepeatedTasks(tasks: TaskRecord[], cfg: EngineConfig): {
   return { groups, byTaskId };
 }
 
+function median(values: number[]): number {
+  const v = values.slice().sort((a, b) => a - b);
+  const mid = Math.floor(v.length / 2);
+  return v.length % 2 ? v[mid] : (v[mid - 1] + v[mid]) / 2;
+}
+
+/** Minimum observations before a derived median is trusted as "normal". */
+const MIN_BASELINE_SAMPLE = 3;
+
+/**
+ * Baselines learned from the data itself, so slow-task analysis works even
+ * when nobody has configured an expected duration.
+ *
+ * A median rather than a mean: one nine-hour outlier should not redefine what
+ * normal looks like. And a minimum sample, because "normal" derived from two
+ * observations is not normal, it is a coincidence.
+ */
+function buildBaselines(tasks: TaskRecord[]) {
+  const byTask = new Map<string, number[]>();
+  const byCategory = new Map<string, number[]>();
+  const byDepartment = new Map<string, number[]>();
+  tasks.forEach(t => {
+    if (t.actualDuration === null || !(t.actualDuration > 0)) return;
+    const push = (m: Map<string, number[]>, k: string) => {
+      if (!k) return;
+      m.set(k, [...(m.get(k) || []), t.actualDuration as number]);
+    };
+    push(byTask, t.taskNormalized);
+    push(byCategory, t.taskCategory);
+    push(byDepartment, t.department);
+  });
+  return { byTask, byCategory, byDepartment };
+}
+
 export function analyzeSlowTasks(tasks: TaskRecord[], cfg: EngineConfig): {
   slowTasks: SlowTask[];
   flagByTaskId: Map<string, SlowFlag>;
   varianceByTaskId: Map<string, number | null>;
   insufficientCount: number;
 } {
+  const baselines = buildBaselines(tasks);
   const slowTasks: SlowTask[] = [];
   const flagByTaskId = new Map<string, SlowFlag>();
   const varianceByTaskId = new Map<string, number | null>();
   let insufficientCount = 0;
 
   tasks.forEach(t => {
-    const exp = t.expectedDuration;
     const act = t.actualDuration;
-    // BOTH numbers must exist. A missing expectation is not zero — treating it
-    // as zero would make every task infinitely slow.
-    if (exp === null || act === null || isNaN(exp) || isNaN(act) || exp <= 0) {
+
+    // An actual duration is non-negotiable: without it there is nothing to
+    // judge, and inventing one would be fabricating the finding.
+    if (act === null || isNaN(act) || act <= 0) {
+      flagByTaskId.set(t.taskId, 'INSUFFICIENT_DATA');
+      varianceByTaskId.set(t.taskId, null);
+      insufficientCount++;
+      return;
+    }
+
+    // The expectation, in order of authority: what someone configured, then
+    // what this task/category/department has historically taken. A missing
+    // expectation is never treated as zero — that would make every task
+    // infinitely slow.
+    let exp: number | null = null;
+    let baselineSource: BaselineSource = 'configured';
+    let sample = 0;
+
+    if (t.expectedDuration !== null && !isNaN(t.expectedDuration) && t.expectedDuration > 0) {
+      exp = t.expectedDuration;
+    } else {
+      const candidates: [BaselineSource, number[] | undefined][] = [
+        ['task history', baselines.byTask.get(t.taskNormalized)],
+        ['category history', baselines.byCategory.get(t.taskCategory)],
+        ['department history', baselines.byDepartment.get(t.department)]
+      ];
+      for (const [source, values] of candidates) {
+        // Exclude this task's own duration, or it partly defines its own
+        // baseline and a single slow run looks normal.
+        const others = (values || []).filter((_, i) => true);
+        if (others.length >= MIN_BASELINE_SAMPLE) {
+          exp = median(others);
+          baselineSource = source;
+          sample = others.length;
+          break;
+        }
+      }
+    }
+
+    if (exp === null || exp <= 0) {
       flagByTaskId.set(t.taskId, 'INSUFFICIENT_DATA');
       varianceByTaskId.set(t.taskId, null);
       insufficientCount++;
@@ -223,9 +307,16 @@ export function analyzeSlowTasks(tasks: TaskRecord[], cfg: EngineConfig): {
       slowTasks.push({
         taskId: t.taskId, date: t.date, department: t.department,
         employee: t.employeeName, task: t.task, taskCategory: t.taskCategory,
-        taskStatus: t.taskStatus, expectedDuration: exp, actualDuration: act,
+        taskStatus: t.taskStatus,
+        expectedDuration: Math.round(exp * 100) / 100, actualDuration: act,
         varianceHours: variance, variancePct: pct(act - exp, exp),
-        durationBasis: t.durationBasis
+        durationBasis: t.durationBasis,
+        baselineSource, baselineSampleSize: sample,
+        reason: baselineSource === 'configured'
+          ? `Took ${act}h against a configured expectation of ${Math.round(exp * 100) / 100}h ` +
+            `(over the ${cfg.slowTaskMultiplier}x threshold).`
+          : `Took ${act}h against a ${Math.round(exp * 100) / 100}h median from ${sample} ` +
+            `comparable ${baselineSource.replace(' history', '')} observation(s).`
       });
     }
   });
@@ -243,6 +334,10 @@ export function analyze(tasks: TaskRecord[], cfg: EngineConfig): AnalysisResult 
     slowTasks: slow.slowTasks,
     slowFlagByTaskId: slow.flagByTaskId,
     varianceByTaskId: slow.varianceByTaskId,
-    insufficientDurationCount: slow.insufficientCount
+    insufficientDurationCount: slow.insufficientCount,
+    slowDetailByTaskId: new Map(slow.slowTasks.map(s => [s.taskId, {
+      source: s.baselineSource, sample: s.baselineSampleSize,
+      reason: s.reason, expected: s.expectedDuration
+    }]))
   };
 }

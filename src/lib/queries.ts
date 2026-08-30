@@ -104,7 +104,8 @@ export async function getRepeatGroups(ownerUserId: number) {
 export async function getSlowTasks(ownerUserId: number) {
   const rows = await query<Record<string, string | number>>(
     `select task_date, department, employee, task, task_category, task_status,
-            expected_duration, actual_duration, variance_hours, variance_pct, duration_basis
+            expected_duration, actual_duration, variance_hours, variance_pct,
+            duration_basis, baseline_source, baseline_sample, reason
      from slow_tasks where owner_user_id = $1`, [ownerUserId]);
   return rows.map(r => ({
     date: String(r.task_date), department: String(r.department ?? ''),
@@ -112,7 +113,10 @@ export async function getSlowTasks(ownerUserId: number) {
     category: String(r.task_category ?? ''), status: String(r.task_status),
     expected: Number(r.expected_duration), actual: Number(r.actual_duration),
     variance: Number(r.variance_hours), variancePct: Number(r.variance_pct),
-    basis: String(r.duration_basis)
+    basis: String(r.duration_basis),
+    baselineSource: String(r.baseline_source ?? 'configured'),
+    baselineSample: Number(r.baseline_sample ?? 0),
+    reason: String(r.reason ?? '')
   }));
 }
 
