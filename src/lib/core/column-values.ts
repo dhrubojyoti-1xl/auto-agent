@@ -21,6 +21,16 @@
  */
 import type { EngineConfig, Field, Masters } from './types';
 import { cleanWhitespace, normalizeStatus, parseDate } from './normalize';
+import { statusIsAmbiguous, statusMeansPlanned } from './semantic-headers';
+
+/**
+ * Anything the ingest layer could make a status of. Using a narrower test here
+ * makes a column fragile: a report with two "Planned" rows out of eight would
+ * stop looking like a status column for no reason a person would accept.
+ */
+function looksLikeStatus(v: string, masters: Masters): boolean {
+  return !!normalizeStatus(v, masters) || statusMeansPlanned(v) || statusIsAmbiguous(v);
+}
 
 export interface ValueProfile {
   filled: number;
@@ -53,7 +63,7 @@ export function profileColumn(
   let dates = 0, statuses = 0, people = 0, numbers = 0, urls = 0, words = 0;
   for (const v of filled) {
     if (parseDate(v, cfg.dateOrder)) dates++;
-    if (normalizeStatus(v, masters)) statuses++;
+    if (looksLikeStatus(v, masters)) statuses++;
     if (PERSON.test(v)) people++;
     if (/^-?[\d.,%]+$/.test(v)) numbers++;
     if (/^https?:\/\//i.test(v)) urls++;

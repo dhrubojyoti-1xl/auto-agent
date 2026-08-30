@@ -308,16 +308,23 @@ export function mapHeaderRow(rows: Cell[][], masters: Masters, cfg: EngineConfig
   // Relaxed pass: a table missing only ONE required column is still recognised,
   // so its rows fail validation individually with a precise reason instead of
   // the whole table vanishing silently.
+  //
+  // Values are consulted here too, and that matters more than it sounds. A
+  // screenshot clipped at the right edge gives a status column headed
+  // "Current St", which names nothing — while the column beneath it is plainly
+  // eight statuses. Reading headings alone threw the whole report away over a
+  // truncated word.
   for (let r = 0; r < scanLimit; r++) {
-    const mapping: Partial<Record<Field, number>> = {};
-    let matches = 0;
-    rows[r].forEach((cell, i) => {
-      const field = normalizeHeader(cell.text, masters);
-      if (field && !(field in mapping)) { mapping[field] = i; matches++; }
-    });
+    const header = mapOneRow(rows[r], masters);
+    const filled = fillFromValues(rows, r, header.mapping, masters, cfg);
+    const mapping = filled.mapping;
+    const matches = header.matches + filled.added.length;
     const reqHit = REQUIRED.filter(f => f in mapping).length;
     if (reqHit >= 3 && matches >= 3) {
-      return { headerRowIndex: r, mapping, matches, partialHeader: true };
+      return {
+        headerRowIndex: r, mapping, matches, partialHeader: true,
+        decisions: filled.added.length ? filled.added : undefined
+      };
     }
   }
   return null;
