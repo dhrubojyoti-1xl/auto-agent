@@ -8,7 +8,9 @@
  */
 
 export const STATUSES = [
-  'Completed', 'In Progress', 'Pending', 'Blocked', 'Not Started', 'Cancelled'
+  'Completed', 'In Progress', 'Pending', 'Blocked', 'Not Started', 'Cancelled',
+  // A cell naming two states at once. Kept as recorded, counted in nothing.
+  'Ambiguous'
 ] as const;
 export type TaskStatus = typeof STATUSES[number];
 
@@ -149,11 +151,17 @@ export interface TaskRecord {
   taskFingerprint: string;
   /** Which stream of work the column this came from described. */
   workKind?: string;
+  /**
+   * How this row was obtained: 'table' for a parsed spreadsheet or HTML table,
+   * 'vision' for a transcription from an image or PDF. A figure read out of a
+   * picture must remain distinguishable from one that was typed.
+   */
+  extractionSource?: string;
   notes: string;
 }
 
 export type RejectionReason =
-  | 'MISSING_REQUIRED_FIELD' | 'INVALID_DATE' | 'UNKNOWN_STATUS'
+  | 'MISSING_REQUIRED_FIELD' | 'INVALID_DATE' | 'UNKNOWN_STATUS' | 'AMBIGUOUS_STATUS'
   | 'UNKNOWN_EMPLOYEE' | 'TASK_TOO_SHORT' | 'TASK_NOT_MEANINGFUL'
   | 'DUPLICATE_ACROSS_DOCUMENTS';
 
@@ -184,6 +192,10 @@ export interface SourceDocument {
   tables?: Table[];
   /** Filename when this document is an attachment rather than a body. */
   attachmentName?: string;
+  /** Set when this document's tables were transcribed from an image or PDF. */
+  extractionSource?: string;
+  /** A date stated in a title line above the header, with the phrase it came from. */
+  titleDate?: { date: string; quote: string };
   /**
    * The covering text of the email this document came from.
    *

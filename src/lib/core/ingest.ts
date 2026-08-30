@@ -11,7 +11,9 @@
  *               departments.
  */
 import { departmentFromEvidence, inferReportDate } from './evidence';
-import { workKindFromHeader } from './semantic-headers';
+import {
+  statusIsAmbiguous, statusMeansPlanned, workKindFromHeader
+} from './semantic-headers';
 import type {
   Cell, EngineConfig, Employee, Field, IngestResult, Masters, RejectedRow,
   SourceDocument, TaskRecord
@@ -113,6 +115,8 @@ function buildTaskRecord(
     reportDate: string;
     /** The words that date was read from, recorded on the row. */
     reportDateQuote: string;
+    /** 'table' or 'vision'. */
+    extractionSource: string;
     /**
      * Who sent the report, used only when the table has no employee column at
      * all. A blank cell in a table that HAS one is a malformed row and is
@@ -209,6 +213,28 @@ function buildTaskRecord(
   const rawStatus = cleanWhitespace(raw.status);
   if (!rawStatus) return { ok: false, reason: 'MISSING_REQUIRED_FIELD', detail: 'Status is empty' };
   let status = normalizeStatus(rawStatus, masters);
+  let statusWorkKind = '';
+
+  if (!status && statusMeansPlanned(rawStatus)) {
+    // The stream is stated in the status cell rather than the column heading.
+    // The work has not started, and it must not be counted as work that
+    // failed to finish.
+    status = 'Not Started';
+    statusWorkKind = 'PLANNED';
+    problems.push(`"${cleanWhitespace(rawStatus)}" recorded as planned work, ` +
+                  `excluded from completion figures`);
+  }
+
+  if (!status && statusIsAmbiguous(rawStatus)) {
+    // Two states in one cell is a person recording that they do not know.
+    // Resolving it either way invents a fact, so it is kept as it is and
+    // counted in nothing.
+    status = 'Ambiguous';
+    problems.push(`"${cleanWhitespace(rawStatus)}" names more than one state, so it is ` +
+                  `recorded as ambiguous and left out of the completion figures. ` +
+                  `Re-send the row with a single status.`);
+  }
+
   if (!status) {
     if (cfg.rejectUnknownStatus) {
       return {
@@ -261,7 +287,10 @@ function buildTaskRecord(
       reportId: ctx.reportId,
       date,
       department,
-      workKind: ctx.workKind,
+      // A status naming the future outranks the column heading: a row that
+      // says "Planned" is planned whatever the column is called.
+      workKind: statusWorkKind || ctx.workKind,
+      extractionSource: ctx.extractionSource,
       employeeName: emp.name,
       employeeId: emp.id,
       task: rawTask,
@@ -356,8 +385,14 @@ export function ingestDocument(
 
   // The day the report is about, when its rows do not say. Never the arrival
   // date on its own: a Monday email about Friday's work is not Monday's work.
-  const dateEvidence = inferReportDate(
-    { subject: doc.subject, body: doc.contextText, receivedAt: doc.receivedAt }, cfg);
+  // A title line printed above the table — "DAILY WORK UPDATE — 30 AUGUST 2026"
+  // — is the report stating its own date, which outranks anything inferred
+  // from the covering email.
+  const dateEvidence = doc.titleDate
+    ? { date: doc.titleDate.date, quote: `title row: ${doc.titleDate.quote}`,
+        basis: 'stated in body' as const, confidence: 0.9 }
+    : inferReportDate(
+        { subject: doc.subject, body: doc.contextText, receivedAt: doc.receivedAt }, cfg);
 
   // The sender as a person: "Ada Lovelace <a@x.com>" -> "Ada Lovelace",
   // and a bare address falls back to its local part.
@@ -381,6 +416,7 @@ export function ingestDocument(
           departmentHint,
           reportDate: dateEvidence?.date || '',
           reportDateQuote: dateEvidence?.quote || '',
+          extractionSource: doc.extractionSource || 'table',
           tableIndex: tIdx, rowIndex: r,
           workKind: workKindFor(rt.header, rt.table.rows),
           // Only when this table has no employee column of its own.

@@ -22,7 +22,8 @@ const REQUIRED_COLUMNS: [table: string, column: string][] = [
   ['documents', 'detector_version'],
   ['documents', 'classification'],
   ['tasks', 'work_kind'],
-  ['documents', 'departments_count']
+  ['documents', 'departments_count'],
+  ['tasks', 'extraction_source']
 ];
 
 const REQUIRED_VIEWS = [

@@ -274,3 +274,36 @@ export function workKindFromHeader(raw: string): WorkKind {
   if (has(TODAY)) return 'COMPLETED_TODAY';
   return 'REPORTED';
 }
+
+/**
+ * Work that a status value places in the future.
+ *
+ * A report often states the stream in the status cell rather than the column
+ * heading: a row reading "Planned" is tomorrow's intention, not today's
+ * unfinished work, and counting it as the latter overstates what was left
+ * undone. The canonical status is still recorded — the row is Not Started —
+ * but it leaves the completion figures entirely.
+ */
+const PLANNED_STATUS = /^(planned|planned work|to ?be ?started|to ?be ?done|scheduled|upcoming|next ?day|tomorrow|future|yet to begin)\b/i;
+
+export function statusMeansPlanned(raw: string): boolean {
+  return PLANNED_STATUS.test(String(raw ?? '').trim());
+}
+
+/**
+ * A status cell naming two states at once.
+ *
+ * "Completed/Ongoing" is not a spelling to be corrected into one of its
+ * halves — it is a person recording that they do not know, and resolving it
+ * either way invents a fact. The row is kept, marked ambiguous, raised on Data
+ * quality, and excluded from the numerator and the denominator both, because
+ * counting it as incomplete is as much a claim as counting it as complete.
+ */
+export function statusIsAmbiguous(raw: string): boolean {
+  const t = String(raw ?? '').trim();
+  if (!t) return false;
+  const parts = t.split(/\s*[/|,]\s*|\s+(?:or|and|then)\s+/i).map(x => x.trim()).filter(Boolean);
+  if (parts.length < 2) return false;
+  const STATEISH = /(complete|done|finish|progress|ongoing|pending|blocked|hold|start|cancel|review)/i;
+  return parts.filter(x => STATEISH.test(x)).length >= 2;
+}

@@ -138,7 +138,7 @@ export default async function ConnectPage({
                       <td>
                         <span className={'pill ' + (
                           a.lastSyncStatus === 'OK' ? 'ok'
-                            : a.lastSyncStatus === 'REAUTH_REQUIRED' ? 'bad'
+                            : (a.lastSyncStatus === 'GMAIL_AUTH_ERROR' || a.lastSyncStatus === 'REAUTH_REQUIRED') ? 'bad'
                             : a.lastSyncStatus ? 'warn' : 'mute')}>
                           {a.lastSyncStatus || 'pending'}
                         </span>
@@ -150,7 +150,7 @@ export default async function ConnectPage({
                 </tbody>
               </table>
             </div>
-            {accounts.some(a => a.lastSyncStatus === 'REAUTH_REQUIRED') && (
+            {accounts.some(a => (a.lastSyncStatus === 'GMAIL_AUTH_ERROR' || a.lastSyncStatus === 'REAUTH_REQUIRED')) && (
               <div className="banner bad">
                 Google access was revoked or expired for one of these accounts. Reconnect it
                 to resume automatic collection.

@@ -11,6 +11,15 @@ import { query } from './db';
  */
 const NOT_PLANNED = "work_kind <> 'PLANNED'";
 
+/**
+ * A row whose status names two states at once is counted in nothing.
+ *
+ * Leaving it in the denominator would mean counting it as work that failed to
+ * complete, which is as much of a claim as counting it as complete. It stays
+ * visible on Data quality, where somebody can ask for a single status.
+ */
+const NOT_AMBIGUOUS = "task_status <> 'Ambiguous'";
+
 export interface Kpis {
   total: number; completed: number; pending: number; inProgress: number;
   blocked: number; completionRate: number; slowTasks: number;
@@ -39,7 +48,8 @@ export async function getKpis(ownerUserId: number): Promise<Kpis> {
       count(distinct employee_name)::int as employees_reporting,
       count(*) filter (where slow_task_flag = 'INSUFFICIENT_DATA')::int as insufficient_duration,
       min(task_date) as first_date, max(task_date) as last_date
-    from tasks where owner_user_id = $1 and work_kind <> 'PLANNED'`, [ownerUserId]);
+    from tasks where owner_user_id = $1 and work_kind <> 'PLANNED'
+      and task_status <> 'Ambiguous'`, [ownerUserId]);
   return {
     total: Number(r.total), completed: Number(r.completed), pending: Number(r.pending),
     inProgress: Number(r.in_progress), blocked: Number(r.blocked),
@@ -213,7 +223,7 @@ export async function getPeriodSeries(
   opts: { department?: string; employee?: string; from?: string; to?: string; limit?: number } = {}
 ): Promise<PeriodPoint[]> {
   const params: unknown[] = [ownerUserId];
-  const where = ['owner_user_id = $1', NOT_PLANNED];
+  const where = ['owner_user_id = $1', NOT_PLANNED, NOT_AMBIGUOUS];
   if (opts.department) { params.push(opts.department); where.push(`department = $${params.length}`); }
   if (opts.employee) { params.push(opts.employee); where.push(`employee_name = $${params.length}`); }
   if (opts.from) { params.push(opts.from); where.push(`task_date >= $${params.length}`); }
@@ -256,7 +266,7 @@ export async function getDepartmentBreakdown(
   ownerUserId: number, opts: { employee?: string; from?: string; to?: string } = {}
 ) {
   const params: unknown[] = [ownerUserId];
-  const where = ['owner_user_id = $1', NOT_PLANNED];
+  const where = ['owner_user_id = $1', NOT_PLANNED, NOT_AMBIGUOUS];
   if (opts.employee) { params.push(opts.employee); where.push(`employee_name = $${params.length}`); }
   if (opts.from) { params.push(opts.from); where.push(`task_date >= $${params.length}`); }
   if (opts.to) { params.push(opts.to); where.push(`task_date <= $${params.length}`); }
@@ -293,7 +303,7 @@ export async function getStatusDistribution(
   opts: { department?: string; employee?: string; from?: string; to?: string } = {}
 ) {
   const params: unknown[] = [ownerUserId];
-  const where = ['owner_user_id = $1', NOT_PLANNED];
+  const where = ['owner_user_id = $1', NOT_PLANNED, NOT_AMBIGUOUS];
   if (opts.department) { params.push(opts.department); where.push(`department = $${params.length}`); }
   if (opts.employee) { params.push(opts.employee); where.push(`employee_name = $${params.length}`); }
   if (opts.from) { params.push(opts.from); where.push(`task_date >= $${params.length}`); }
@@ -310,7 +320,7 @@ export async function getEmployeeActivity(
           limit?: number } = {}
 ) {
   const params: unknown[] = [ownerUserId];
-  const where = ['owner_user_id = $1', NOT_PLANNED];
+  const where = ['owner_user_id = $1', NOT_PLANNED, NOT_AMBIGUOUS];
   if (opts.department) { params.push(opts.department); where.push(`department = $${params.length}`); }
   if (opts.employee) { params.push(opts.employee); where.push(`employee_name = $${params.length}`); }
   if (opts.from) { params.push(opts.from); where.push(`task_date >= $${params.length}`); }

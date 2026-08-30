@@ -26,8 +26,10 @@ import { extractPipeTables, extractTables, mapHeaderRow } from './html-table';
  *
  *   1  body tables and parsable attachments
  *   2  Google Sheets links followed via their CSV export
+ *   3  message classification recorded with evidence
+ *   4  images and PDFs transcribed, with structural verification
  */
-export const DETECTOR_VERSION = 3;
+export const DETECTOR_VERSION = 4;
 
 /**
  * What a message turned out to be.

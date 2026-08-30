@@ -21,6 +21,8 @@ const ROWS: [string, string, string, string, string][] = [
   ['Mita Roy', 'Marketing', 'Campaign Performance Review', 'Completed', 'COMPLETED_WORK'],
   ['Dhrubo Ganguly', 'AI & Technology', 'Dashboard Visual Improvements', 'Completed', 'COMPLETED_WORK'],
   ['Rahul Mehta', 'Sales', 'New Lead Research', 'Completed', 'COMPLETED_WORK'],
+  // The report writes "Planned" in the status cell; the canonical status is
+  // Not Started and the row is planned work.
   ['Priya Sharma', 'HR', 'Policy Update', 'Not Started', 'PLANNED']
 ];
 

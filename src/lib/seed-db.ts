@@ -12,7 +12,10 @@ const STATUS_ROWS: [string, boolean, boolean, number][] = [
   ['Pending', false, false, 3],
   ['Blocked', false, false, 4],
   ['Not Started', false, false, 5],
-  ['Cancelled', false, true, 6]
+  ['Cancelled', false, true, 6],
+  // Recorded, never resolved: a cell naming two states at once is kept as it
+  // is and left out of every figure.
+  ['Ambiguous', false, false, 7]
 ];
 
 export interface SeedOptions {

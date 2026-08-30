@@ -305,7 +305,7 @@ d('automatic Gmail ingestion', () => {
     expect(runs[0].reports_found).toBe(3);
   });
 
-  it('a revoked Google grant surfaces as REAUTH_REQUIRED, not a crash', async () => {
+  it('a revoked Google grant surfaces as GMAIL_AUTH_ERROR, not a crash', async () => {
     // A serverless invocation starts with no cached token; mirror that, or the
     // stale token hides the revocation.
     accounts.clearTokenCache();
@@ -319,10 +319,10 @@ d('automatic Gmail ingestion', () => {
     const row = await connectedAccount();
     const account = await accounts.getGmailAccount(Number(row.id), 1);
     const summary = await sync.syncAccount(account, 'test');
-    expect(summary.status).toBe('REAUTH_REQUIRED');
+    expect(summary.status).toBe('GMAIL_AUTH_ERROR');
 
     const [acct] = await db.query('select last_sync_status from gmail_accounts limit 1');
-    expect(acct.last_sync_status).toBe('REAUTH_REQUIRED');
+    expect(acct.last_sync_status).toBe('GMAIL_AUTH_ERROR');
   });
 
   it('analysis and the dashboard views reflect the imported mail', async () => {

@@ -155,11 +155,11 @@ export async function getAttention(ownerUserId: number): Promise<AttentionItem[]
   const [sync] = await query<Record<string, string | number | null>>(
     `select
        (select count(*)::int from sync_runs
-         where owner_user_id = $1 and status in ('FAILED','REAUTH_REQUIRED')
+         where owner_user_id = $1 and status in ('FAILED','REAUTH_REQUIRED','GMAIL_AUTH_ERROR')
            and started_at > now() - interval '3 days')            as recent_failures,
        (select count(*)::int from gmail_accounts
          where owner_user_id = $1 and active
-           and last_sync_status = 'REAUTH_REQUIRED')              as reauth,
+           and last_sync_status in ('REAUTH_REQUIRED','GMAIL_AUTH_ERROR'))              as reauth,
        (select max(started_at) from sync_runs
          where owner_user_id = $1 and status = 'OK')              as last_ok`, [ownerUserId]);
 
@@ -204,7 +204,9 @@ export async function getAttention(ownerUserId: number): Promise<AttentionItem[]
           and work_kind <> 'PLANNED'
           and coalesce(department,'') in ('', 'Unassigned'))               as unattributed,
        (select count(*)::int from repeat_groups where owner_user_id = $1
-          and classification in ('Needs Review','Potential Duplication'))  as repeats`,
+          and classification in ('Needs Review','Potential Duplication'))  as repeats,
+       (select count(*)::int from tasks where owner_user_id = $1
+          and task_status = 'Ambiguous')                                   as ambiguous`,
     [ownerUserId]);
 
   if (num(quality?.review_msgs) > 0) {
@@ -222,6 +224,16 @@ export async function getAttention(ownerUserId: number): Promise<AttentionItem[]
       title: 'Blocked work',
       detail: 'Reported as blocked and not moving without a decision.',
       href: '/management', action: 'See tasks'
+    });
+  }
+  if (num(quality?.ambiguous) > 0) {
+    items.push({
+      severity: 'medium', count: num(quality.ambiguous),
+      title: 'Rows whose status names two states at once',
+      detail: 'Recorded as sent and counted in nothing — treating them as either ' +
+              'complete or incomplete would be a claim the report does not make. ' +
+              'Ask the sender for a single status.',
+      href: '/quality', action: 'See rows'
     });
   }
   if (num(quality?.open_rows) > 0) {

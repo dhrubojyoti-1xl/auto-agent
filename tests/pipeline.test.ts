@@ -41,7 +41,7 @@ d('pipeline against Postgres', () => {
     const [{ count: statuses }] = await db.query('select count(*)::int as count from statuses');
     const [{ count: aliases }] = await db.query('select count(*)::int as count from status_aliases');
     const [{ count: cats }] = await db.query('select count(*)::int as count from task_categories');
-    expect(statuses).toBe(6);
+    expect(statuses).toBe(7);
     expect(aliases).toBeGreaterThan(40);
     expect(cats).toBe(13);
   });

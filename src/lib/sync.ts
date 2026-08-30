@@ -23,6 +23,8 @@ import {
 import type { MessageClassification } from './core/detect';
 import { csvToTables } from './core/attachments';
 import { fetchSheet, findSheetLinks } from './core/links';
+import { dateFromTitle, verifyVisionTable, visionTableToRows } from './core/vision';
+import { transcribeTable, visionAvailable, visionMediaType } from './vision-client';
 import { ingestDocument } from './core/ingest';
 import { parseDate } from './core/normalize';
 import type { SourceDocument } from './core/types';
@@ -37,9 +39,18 @@ import {
   getAccessTokenFor, GmailAccount, invalidateAccessToken, listGmailAccounts, recordSyncResult
 } from './accounts';
 
+/**
+ * GMAIL_AUTH_ERROR is the outward name for "Google will not give us a token
+ * any more". It is never retried: an invalid_grant does not become valid by
+ * asking again, and retrying it turns a one-click fix into a daily failure.
+ *
+ * On an OAuth app in Testing status Google expires refresh tokens after seven
+ * days, so this is not an exceptional condition — it is a weekly one, and it
+ * has to read as "press this button", never as a sync failure.
+ */
 export interface SyncSummary {
   accountEmail: string;
-  status: 'OK' | 'PARTIAL' | 'FAILED' | 'REAUTH_REQUIRED';
+  status: 'OK' | 'PARTIAL' | 'FAILED' | 'GMAIL_AUTH_ERROR';
   messagesScanned: number;
   reportsFound: number;
   rowsImported: number;
@@ -90,7 +101,7 @@ export async function syncAccount(account: GmailAccount, trigger: string): Promi
     accessToken = await getAccessTokenFor(account);
   } catch (e) {
     const code = (e as Error & { code?: string }).code;
-    summary.status = code === 'REAUTH_REQUIRED' ? 'REAUTH_REQUIRED' : 'FAILED';
+    summary.status = code === 'REAUTH_REQUIRED' ? 'GMAIL_AUTH_ERROR' : 'FAILED';
     summary.errors.push((e as Error).message);
     await finishRun(runId, summary);
     await recordSyncResult(account.id, summary.status, (e as Error).message);
@@ -183,7 +194,7 @@ export async function syncAccount(account: GmailAccount, trigger: string): Promi
     if (summary.errors.length) summary.status = 'PARTIAL';
   } catch (e) {
     const code = (e as Error & { code?: string }).code;
-    summary.status = code === 'REAUTH_REQUIRED' ? 'REAUTH_REQUIRED' : 'FAILED';
+    summary.status = code === 'REAUTH_REQUIRED' ? 'GMAIL_AUTH_ERROR' : 'FAILED';
     summary.errors.push((e as Error).message);
   }
 
@@ -241,6 +252,19 @@ async function documentsFromMessage(
     // is how a department mails its report every day, sees it arrive in the
     // inbox, and finds nothing in the dashboard and no explanation anywhere.
     if (!isParsableAttachment(att.filename, att.mimeType)) {
+      // A picture of a table, or a PDF. Read it, but only import if the
+      // transcription survives every structural check — see core/vision.
+      const media = visionMediaType(att.filename, att.mimeType);
+      const worthReading = media && (
+        media === 'application/pdf' || looksLikeReportImage(att.filename, att.mimeType, att.size));
+
+      if (worthReading && visionAvailable() && att.size <= MAX_ATTACHMENT_BYTES) {
+        const outcome = await readByVision(
+          att, msg, accessToken, masters, cfg, media as string);
+        if (outcome.doc) { docs.push(outcome.doc); continue; }
+        if (outcome.skipped) { skipped.push(outcome.skipped); continue; }
+      }
+
       if (isUnreadableDocumentAttachment(att.filename, att.mimeType)) {
         skipped.push({
           filename: att.filename, reason: 'ATTACHMENT_FORMAT_UNSUPPORTED',
@@ -361,6 +385,65 @@ async function documentsFromMessage(
   }
 
   return docs;
+}
+
+/**
+ * Transcribes a picture or a PDF and returns a document only when every check
+ * passed. Anything else comes back as a review item naming the check it
+ * failed — a partial import from a misread table is the outcome that must not
+ * happen, because it looks exactly like a complete one.
+ */
+async function readByVision(
+  att: { filename: string; mimeType: string; attachmentId: string; size: number },
+  msg: GmailMessage, accessToken: string,
+  masters: Awaited<ReturnType<typeof loadMasters>>,
+  cfg: ReturnType<typeof engineConfig>,
+  media: string
+): Promise<{ doc?: SourceDocument; skipped?: SkippedAttachment }> {
+  let buf: Buffer;
+  try {
+    buf = await getAttachment(accessToken, msg.id, att.attachmentId);
+  } catch (e) {
+    return { skipped: { filename: att.filename, reason: 'ATTACHMENT_FAILED',
+      detail: `${att.filename}: ${(e as Error).message}`.slice(0, 300) } };
+  }
+
+  const read = await transcribeTable(buf, media);
+  if (!read.ok) {
+    return { skipped: { filename: att.filename, reason: 'IMAGE_REVIEW_REQUIRED',
+      detail: `A report was detected in ${att.filename} and could not be transcribed. ` +
+              read.reason } };
+  }
+
+  const verified = verifyVisionTable(read.table, masters);
+  if (!verified.ok) {
+    return { skipped: { filename: att.filename, reason: 'IMAGE_REVIEW_REQUIRED',
+      detail: `A report was detected in ${att.filename} and was not imported. ` +
+              verified.reason } };
+  }
+
+  const grid = visionTableToRows(verified.table);
+  const tables = [{
+    index: 0, source: 'text' as const,
+    rows: grid.map(r => r.map(text => ({ text, href: '' })))
+  }];
+  const signal = detectInTables(tables, masters, cfg);
+  if (!signal.isReport) {
+    return { skipped: { filename: att.filename, reason: 'IMAGE_NOT_A_REPORT',
+      detail: `${att.filename} was transcribed but is not a report: ${signal.reason}` } };
+  }
+
+  return {
+    doc: {
+      documentId: `gmail:${msg.id}:${att.filename}`,
+      subject: `${msg.subject} [${att.filename}]`,
+      sender: msg.from, receivedAt: msg.date,
+      tables, attachmentName: att.filename,
+      extractionSource: 'vision',
+      titleDate: dateFromTitle(verified.table.title) || undefined,
+      contextText: verified.table.title || undefined
+    }
+  };
 }
 
 /**

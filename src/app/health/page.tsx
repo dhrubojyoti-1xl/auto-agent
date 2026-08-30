@@ -55,6 +55,11 @@ export default async function SyncHealthPage() {
   }), { scanned: 0, found: 0, imported: 0, rejected: 0, duplicate: 0 });
 
   const lastRun = runs[0];
+  const needsReconnect =
+    inboxes.some(a => a.lastSyncStatus === 'GMAIL_AUTH_ERROR' ||
+                      a.lastSyncStatus === 'REAUTH_REQUIRED') ||
+    runs.slice(0, 3).some(r => r.status === 'GMAIL_AUTH_ERROR' ||
+                               r.status === 'REAUTH_REQUIRED');
   const lastError = runs.find(r => r.errorMessage)?.errorMessage || '';
   const processed = docStats.filter(d => d.status !== 'NO_DATA')
     .reduce((n, d) => n + d.n, 0);
@@ -79,6 +84,27 @@ export default async function SyncHealthPage() {
 
         {dbError && <div className="banner bad"><strong>Database unavailable.</strong> {dbError}</div>}
 
+        {/* The one condition a manager must be able to clear themselves, and
+            the one that will actually happen: an OAuth app in Testing status
+            expires its refresh token every seven days. It has to read as a
+            button, not as a failure. */}
+        {needsReconnect && (
+          <div className="banner bad" style={{ display: 'grid', gap: '.6rem' }}>
+            <div>
+              <strong>Gmail access has expired.</strong> Google stopped accepting the saved
+              authorisation, so reports are not being collected. Nothing already imported is
+              affected, and no report is lost &mdash; unread mail is read on the next sync.
+            </div>
+            <div className="small">
+              This happens roughly every seven days while the Google app is in Testing
+              status. One click fixes it.
+            </div>
+            <div className="row">
+              <a className="btn" href="/api/auth/google">Reconnect Gmail</a>
+            </div>
+          </div>
+        )}
+
         <h2>Connection</h2>
         <div className="table-wrap">
           <table>
@@ -91,7 +117,9 @@ export default async function SyncHealthPage() {
               <Row label="Last sync"
                    value={formatStamp(lastRun?.startedAt, 'never')}
                    note={lastRun ? `(${lastRun.trigger})` : ''} />
-              <Row label="Sync status" value={lastRun ? lastRun.status : '—'} />
+              <Row label="Sync status"
+                   value={lastRun ? lastRun.status : '—'}
+                   note={needsReconnect ? '— reconnect above to resume' : ''} />
               <Row label="Last successful sync"
                    value={formatStamp(runs.find(r => r.status === 'OK')?.startedAt, 'never')} />
               <Row label="Automatic schedule" value="daily at 03:00 UTC"
