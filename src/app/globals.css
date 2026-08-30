@@ -426,3 +426,26 @@ nav.top a.secondary-link:hover { opacity: 1; }
 .msg-head .when { margin-left: auto; color: var(--muted); font-size: var(--text-xs);
                   white-space: nowrap; }
 .msg-body { margin-top: .25rem; overflow-wrap: anywhere; }
+
+/* ---- connection details ------------------------------------------ */
+.conn { display: grid; gap: .35rem; }
+.conn > div {
+  display: grid; grid-template-columns: 6.5rem 1fr auto; gap: .8rem;
+  align-items: center; padding: .45rem .7rem;
+  background: var(--panel-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.conn .k {
+  font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted);
+}
+.conn code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--text-sm); overflow-wrap: anywhere;
+}
+.conn code.muted { color: var(--muted); }
+button.tiny { padding: .2rem .55rem; font-size: var(--text-xs); }
+@media (max-width: 620px) {
+  .conn > div { grid-template-columns: 1fr auto; }
+  .conn .k { grid-column: 1 / -1; }
+}

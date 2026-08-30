@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import Nav from '../nav';
+import BiControls from './bi-controls';
 import { getSession } from '@/lib/auth';
 import { listGmailAccounts, listSyncRuns } from '@/lib/accounts';
 import { getKpis, getRejections } from '@/lib/queries';
@@ -174,6 +175,11 @@ export default async function SyncHealthPage() {
             </div>
           </>
         )}
+
+        <h2>Charts of your own</h2>
+        <div className="card">
+          <BiControls />
+        </div>
 
         <h2>Throughput (last {runs.length} run{runs.length === 1 ? '' : 's'})</h2>
         <div className="kpis">

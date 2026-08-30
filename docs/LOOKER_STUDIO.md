@@ -27,8 +27,14 @@ of this product that is hard, and it stays where it is.
 
 Looker Studio connects to PostgreSQL directly.
 
-1. In Supabase: **Project Settings → Database → Connection string**. Use the
-   **session pooler** host, port `5432`.
+1. In Supabase, click the green **Connect** button at the top of the project
+   page — the sidebar no longer has a Database entry. Choose the **Session
+   pooler** tab.
+
+   Use the session pooler, not the direct connection: direct is IPv6-only on
+   the free plan and Looker Studio connects over IPv4, so it times out with no
+   useful error. Host looks like `aws-0-<region>.pooler.supabase.com`, port
+   `5432`.
 2. Create a read-only user first. In the Supabase SQL editor:
 
    ```sql
@@ -42,8 +48,11 @@ Looker Studio connects to PostgreSQL directly.
    `gmail_accounts`, which holds your encrypted Google token.
 
 3. In Looker Studio: **Create → Data source → PostgreSQL**, enter the host,
-   port, database `postgres`, user `bi_reader` and the password you chose.
-   Tick **Enable SSL**.
+   port `5432`, database `postgres`, and the password you chose.
+
+   The username through the pooler is `bi_reader.<project-id>` — the role name,
+   a full stop, then the Project ID from Project Settings → General. Plain
+   `bi_reader` fails against the pooler. Tick **Enable SSL**.
 4. Pick a view:
 
    | View | One row per | Use it for |
