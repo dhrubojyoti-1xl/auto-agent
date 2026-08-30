@@ -2,16 +2,21 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 
-const LINKS = [
-  ['/', 'Overview'],
+/**
+ * Ordered by how often a manager needs them. Management first, because that is
+ * where the answer to "what happened" lives; Manual entry last and quieter,
+ * because the whole point of the product is that nobody uses it day to day.
+ */
+const LINKS: [string, string, boolean?][] = [
   ['/management', 'Management'],
+  ['/', 'Overview'],
   ['/connect', 'Inbox'],
-  ['/submit', 'Manual entry'],
+  ['/report', 'Management report'],
   ['/repeats', 'Repeated tasks'],
   ['/slow', 'Slow tasks'],
   ['/quality', 'Data quality'],
-  ['/report', 'Management report'],
-  ['/health', 'Sync health']
+  ['/health', 'Sync health'],
+  ['/submit', 'Manual entry', true]
 ];
 
 export default function Nav() {
@@ -21,8 +26,11 @@ export default function Nav() {
     <nav className="top">
       <div className="inner">
         <span className="brand">Department Reporting</span>
-        {LINKS.map(([href, label]) => (
-          <Link key={href} href={href} className={pathname === href ? 'active' : ''}>{label}</Link>
+        {LINKS.map(([href, label, secondary]) => (
+          <Link key={href} href={href}
+                className={(pathname === href ? 'active' : '') + (secondary ? ' secondary-link' : '')}>
+            {label}
+          </Link>
         ))}
         <form onSubmit={async e => {
           e.preventDefault();

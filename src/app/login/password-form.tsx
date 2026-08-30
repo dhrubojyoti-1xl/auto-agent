@@ -18,7 +18,7 @@ export default function PasswordForm({ hasGoogle }: { hasGoogle: boolean }) {
       body: JSON.stringify({ password })
     });
     setBusy(false);
-    if (res.ok) { router.push('/'); router.refresh(); }
+    if (res.ok) { router.push('/management'); router.refresh(); }
     else setError((await res.json().catch(() => ({}))).error || 'Sign in failed');
   }
 

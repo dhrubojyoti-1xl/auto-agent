@@ -10,6 +10,12 @@
 
 const PALETTE = ['#1f6feb', '#1a7f4b', '#a2680a', '#b3261e', '#6b46c1', '#0f766e'];
 
+/**
+ * A chart with nothing worth drawing says what it would show and why it
+ * cannot, at a height that does not leave a hole in the page. Stretching two
+ * data points across a full-size canvas is how a dashboard looks broken while
+ * being technically correct.
+ */
 function EmptyState({ label, height = 180 }: { label: string; height?: number }) {
   return (
     <div className="chart-empty" style={{ height }}>
@@ -23,6 +29,23 @@ function niceMax(v: number): number {
   const mag = Math.pow(10, Math.floor(Math.log10(v)));
   const n = v / mag;
   return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag;
+}
+
+/**
+ * Axis values that are distinct whole numbers.
+ *
+ * Five evenly spaced fractions of a small maximum collapse into each other
+ * once rounded: a chart peaking at two tasks printed "0 0 1 1 1" up its side,
+ * which is worse than no axis at all. When the range is small enough to count,
+ * the ticks are simply the integers in it.
+ */
+function axisTicks(maxY: number, wanted = 5): number[] {
+  if (maxY <= wanted) {
+    return Array.from({ length: maxY + 1 }, (_, i) => i);
+  }
+  const raw = Array.from({ length: wanted }, (_, i) =>
+    Math.round((maxY * i) / (wanted - 1)));
+  return [...new Set(raw)];
 }
 
 /*
@@ -58,7 +81,7 @@ export function LineChart({
   const maxY = niceMax(Math.max(...withData.flatMap(s => s.points.map(p => p.y)), 1));
   const xAt = (x: string) => padL + (xs.indexOf(x) / Math.max(xs.length - 1, 1)) * (W - padL - padR);
   const yAt = (y: number) => H - padB - (y / maxY) * (H - padT - padB);
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map(f => Math.round(maxY * f));
+  const ticks = axisTicks(maxY);
   const labelEvery = Math.ceil(xs.length / 8);
 
   return (
@@ -83,14 +106,39 @@ export function LineChart({
               {withData.length === 1 && <path d={area} fill={PALETTE[si]} opacity="0.10" />}
               <path d={d} fill="none" stroke={PALETTE[si % PALETTE.length]} strokeWidth="2"
                     strokeLinejoin="round" strokeLinecap="round" />
-              {pts.map(p => (
+              {/* A dot per point turns a busy line into a caterpillar. They
+                  earn their place only on a short series; on a long one the
+                  hover bands below carry the values instead. */}
+              {pts.length <= 14 && pts.map(p => (
                 <circle key={p.x} cx={xAt(p.x)} cy={yAt(p.y)} r="3"
                         fill={PALETTE[si % PALETTE.length]}>
                   <title>{`${shortDate(p.x)}: ${p.y}${suffix}` +
                           (s.name !== 'value' ? ` (${s.name})` : '')}</title>
                 </circle>
               ))}
+              {/* The last point is always marked: it is the one a reader
+                  looks for, and it anchors the direct label beside it. */}
+              {pts.length > 14 && (
+                <circle cx={xAt(pts[pts.length - 1].x)} cy={yAt(pts[pts.length - 1].y)}
+                        r="3.5" fill={PALETTE[si % PALETTE.length]} />
+              )}
             </g>
+          );
+        })}
+        {/* One invisible band per period, so hovering anywhere in a column
+            reports every series at that point rather than requiring the
+            reader to hit a 3px dot. */}
+        {xs.map(x => {
+          const w = (W - padL - padR) / Math.max(xs.length, 1);
+          const lines = withData.map(s => {
+            const p = s.points.find(pt => pt.x === x);
+            return p ? `${s.name !== 'value' ? s.name + ': ' : ''}${p.y}${suffix}` : null;
+          }).filter(Boolean);
+          return (
+            <rect key={'hb-' + x} x={xAt(x) - w / 2} y={padT} width={w} height={H - padT - padB}
+                  fill="transparent" className="hoverband">
+              <title>{`${shortDate(x)}\n${lines.join('\n')}`}</title>
+            </rect>
           );
         })}
       </svg>
@@ -125,7 +173,7 @@ export function BarChart({
   const barW = stacked ? Math.min(bandW * 0.55, 54)
                        : Math.min((bandW * 0.7) / Math.max(names.length, 1), 34);
   const yAt = (y: number) => H - padB - (y / maxY) * (H - padT - padB);
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map(f => Math.round(maxY * f));
+  const ticks = axisTicks(maxY);
 
   return (
     <div className="chart-wrap">

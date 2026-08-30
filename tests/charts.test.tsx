@@ -75,3 +75,26 @@ describe('charts under the streaming server renderer', () => {
     expect(html).toContain('<title>Completed: 8 (80%)</title>');
   });
 });
+
+describe('axis labels are readable at small scales', () => {
+  it('never repeats a tick value', async () => {
+    const html = await streamRender(
+      <LineChart yLabel="Tasks" series={[{ name: 'Tasks', points: [
+        { x: '2026-08-01', y: 1 }, { x: '2026-08-02', y: 2 }, { x: '2026-08-03', y: 1 }
+      ] }]} />);
+    // The y-axis previously printed "0 0 1 1 1" for a chart peaking at two.
+    const axis = [...html.matchAll(/class="axis"[^>]*>([^<]*)</g)].map(m => m[1]);
+    const numeric = axis.filter(t => /^\d+$/.test(t));
+    expect(new Set(numeric).size).toBe(numeric.length);
+  });
+
+  it('counts in whole numbers when the range is small', async () => {
+    const html = await streamRender(
+      <LineChart yLabel="Tasks" series={[{ name: 'Tasks', points: [
+        { x: '2026-08-01', y: 1 }, { x: '2026-08-02', y: 2 }
+      ] }]} />);
+    const axis = [...html.matchAll(/class="axis"[^>]*>([^<]*)</g)].map(m => m[1]);
+    expect(axis).toContain('0');
+    expect(axis).toContain('2');
+  });
+})

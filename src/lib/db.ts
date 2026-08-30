@@ -19,6 +19,11 @@ types.setTypeParser(1082, (v: string) => v);
 let pool: Pool | null = null;
 
 export function getPool(): Pool {
+  // Nothing in production ends the pool; test suites do, and a suite that
+  // ended it used to make every suite after it in the same file fail with
+  // "Cannot use a pool after calling end" — reported as *skipped*, which is a
+  // very quiet way to stop running assertions. Closing now clears the handle
+  // (see below), so the next caller simply gets a new pool.
   if (pool) return pool;
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
@@ -46,7 +51,7 @@ export function getPool(): Pool {
       'pooler (port 6543) before real load, or connections will be exhausted.'
     );
   }
-  pool = new Pool({
+  const created = new Pool({
     connectionString,
     max,
     idleTimeoutMillis: isDirect ? 5_000 : 30_000,
@@ -55,6 +60,15 @@ export function getPool(): Pool {
       ? { rejectUnauthorized: false }
       : undefined
   });
+  // Closing forgets the handle, so a later caller opens a fresh pool instead
+  // of throwing. Arguments are passed straight through: pg's end() accepts an
+  // optional callback, and swallowing it makes the call never resolve.
+  const originalEnd = created.end.bind(created);
+  created.end = ((...args: Parameters<Pool['end']>) => {
+    if (pool === created) pool = null;
+    return originalEnd(...args);
+  }) as Pool['end'];
+  pool = created;
   return pool;
 }
 
