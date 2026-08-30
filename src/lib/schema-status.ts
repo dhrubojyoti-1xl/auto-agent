@@ -20,7 +20,8 @@ const REQUIRED_COLUMNS: [table: string, column: string][] = [
   ['ai_reports', 'dataset_fingerprint'],
   ['employees', 'auto_created'],
   ['documents', 'detector_version'],
-  ['documents', 'classification']
+  ['documents', 'classification'],
+  ['tasks', 'work_kind']
 ];
 
 const REQUIRED_VIEWS = [

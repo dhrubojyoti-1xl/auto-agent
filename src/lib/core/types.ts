@@ -126,6 +126,8 @@ export interface TaskRecord {
   dataQualityStatus: 'OK' | 'Partial' | 'Review';
   dataQualityNotes: string;
   taskFingerprint: string;
+  /** Which stream of work the column this came from described. */
+  workKind?: string;
   notes: string;
 }
 

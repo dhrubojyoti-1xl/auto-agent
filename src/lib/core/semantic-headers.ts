@@ -46,10 +46,13 @@ const SIGNALS: Record<string, { strong: string[]; weak: string[]; against?: stri
     against: ['member', 'lead', 'head', 'size']
   },
   task: {
-    strong: ['task', 'work', 'activity', 'job', 'assignment',
+    // "plan" is strong because a column headed "Tomorrow's Plan" is the work
+    // column of a report — the only thing in it is tasks. "planned" stays with
+    // expectedDuration, where "Planned Hours" belongs.
+    strong: ['task', 'work', 'activity', 'job', 'assignment', 'plan',
              'deliverable', 'tarea', 'trabajo', 'aufgabe', 'kaam'],
-    weak: ['description', 'desc', 'detail', 'detail', 'particulars', 'item',
-           'done', 'today', 'performed', 'summary', 'action'],
+    weak: ['description', 'desc', 'detail', 'particular', 'item', 'done',
+           'today', 'yesterday', 'tomorrow', 'performed', 'summary', 'action'],
     against: ['status', 'state', 'date', 'time', 'hour', 'count', 'id', 'no',
               'category', 'type', 'link', 'url']
   },
@@ -123,9 +126,13 @@ const NOT_A_REPORT_FIELD = new Set([
  * silently stops being an employee column.
  */
 function singular(t: string): string {
+  // Words that merely end in s: status, progress, previous, analysis. Stripping
+  // the s turns them into nothing anything matches, which is how a Status
+  // column stops being recognised as one.
+  if (/(us|is|ss|ous)$/.test(t)) return t;
   if (t.length > 4 && t.endsWith('ies')) return t.slice(0, -3) + 'y';
   if (t.length > 4 && /(ses|xes|ches|shes)$/.test(t)) return t.slice(0, -2);
-  if (t.length > 3 && t.endsWith('s') && !t.endsWith('ss')) return t.slice(0, -1);
+  if (t.length > 3 && t.endsWith('s')) return t.slice(0, -1);
   return t;
 }
 
@@ -195,4 +202,43 @@ export function guessField(raw: string, minScore = 3): Field | null {
   // A tie between two fields is not an answer.
   if (second && second.score === best.score) return null;
   return best.field;
+}
+
+/**
+ * Which stream of work a column describes.
+ *
+ * A daily report often has three task columns side by side — yesterday's work,
+ * today's work, tomorrow's plan — and they are not the same measurement.
+ * Counting a plan as a completion overstates what the team did, which is the
+ * one number management actually looks at.
+ *
+ * PLANNED is deliberately the easiest to trigger and the hardest to lose: a
+ * plan counted as completed work is a false claim about people, while a
+ * completion filed as REPORTED is merely less specific.
+ */
+export type WorkKind = 'COMPLETED_TODAY' | 'PREVIOUS_DAY' | 'PLANNED' | 'REPORTED';
+
+const PLANNED = ['plan', 'planned', 'tomorrow', 'next', 'upcoming', 'future',
+                 'proposed', 'scheduled', 'agenda', 'todo', 'backlog'];
+const PREVIOUS = ['yesterday', 'previous', 'prev', 'last', 'carried', 'carry',
+                  'pending from', 'backlog from'];
+const TODAY = ['today', 'todays', 'current', 'completed', 'done', 'achieved',
+               'accomplished'];
+
+/**
+ * Reads the stream out of a column heading. Returns REPORTED when the heading
+ * says nothing about a stream, which is the overwhelmingly common case.
+ */
+export function workKindFromHeader(raw: string): WorkKind {
+  const tokens = headerTokens(raw);
+  if (!tokens.length) return 'REPORTED';
+  const has = (list: string[]) => tokens.some(t => list.includes(t));
+
+  // Checked before the others: "Plan for Tomorrow" contains neither a
+  // completion word nor a previous-day word, but "Completed / Planned" does,
+  // and a plan must not be read as a completion.
+  if (has(PLANNED)) return 'PLANNED';
+  if (has(PREVIOUS)) return 'PREVIOUS_DAY';
+  if (has(TODAY)) return 'COMPLETED_TODAY';
+  return 'REPORTED';
 }

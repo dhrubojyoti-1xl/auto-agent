@@ -497,7 +497,10 @@ async function finishRun(runId: number, s: SyncSummary): Promise<void> {
  *  after a sync rather than per message. */
 export async function rebuildAnalysisAfterSync(ownerUserId: number): Promise<void> {
   const cfg = engineConfig();
-  const tasks = await loadTasks(ownerUserId);
+  // Plans are excluded here for the same reason they are excluded from the
+  // dashboard: work nobody has started cannot be a repeated duty and cannot
+  // have run slowly.
+  const tasks = (await loadTasks(ownerUserId)).filter(t => t.workKind !== 'PLANNED');
   const analysis = analyze(tasks, cfg);
   await writeAnalysisFlags(
     analysis.repeatByTaskId as Map<string, string>,

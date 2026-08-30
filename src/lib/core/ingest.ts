@@ -10,6 +10,7 @@
  *   HONEST      Nothing is invented: no guessed dates, durations, employees or
  *               departments.
  */
+import { workKindFromHeader } from './semantic-headers';
 import type {
   Cell, EngineConfig, Employee, Field, IngestResult, Masters, RejectedRow,
   SourceDocument, TaskRecord
@@ -76,10 +77,22 @@ function isBlankRow(raw: Record<string, string>): boolean {
   return !Object.keys(raw).some(k => cleanWhitespace(raw[k]));
 }
 
+/**
+ * A summary line at the foot of a hand-maintained sheet.
+ *
+ * The word can sit in any column — whoever typed it put it wherever the layout
+ * suited — so every field is checked rather than just the two it was first
+ * seen in. Getting this wrong is not harmless: a totals row that reaches
+ * validation is rejected as a malformed task, which puts a permanent entry on
+ * the Data quality page for a row that was never a task at all.
+ */
+const SUMMARY_WORD = /^(total|grand total|sum|subtotal|overall|summary|count)\b/;
+
 function looksLikeTotalsRow(raw: Record<string, string>): boolean {
-  const t = cleanWhitespace(raw.task || '').toLowerCase();
-  const e = cleanWhitespace(raw.employee || '').toLowerCase();
-  return /^(total|grand total|sum|subtotal)\b/.test(t) || /^(total|grand total)\b/.test(e);
+  for (const key of ['task', 'employee', 'date', 'department', 'status']) {
+    if (SUMMARY_WORD.test(cleanWhitespace(raw[key] || '').toLowerCase())) return true;
+  }
+  return false;
 }
 
 type BuildOk = {
@@ -102,6 +115,8 @@ function buildTaskRecord(
      * somebody else's line.
      */
     senderEmployee: string;
+    /** The stream the task column described: today's work, a plan, and so on. */
+    workKind: string;
     tableIndex: number; rowIndex: number;
   },
   masters: Masters, cfg: EngineConfig, createdEmployees: Employee[]
@@ -226,6 +241,7 @@ function buildTaskRecord(
       reportId: ctx.reportId,
       date,
       department,
+      workKind: ctx.workKind,
       employeeName: emp.name,
       employeeId: emp.id,
       task: rawTask,
@@ -328,6 +344,7 @@ export function ingestDocument(
         raw,
         { reportId, documentId: doc.documentId, receivedAt: doc.receivedAt,
           departmentHint, tableIndex: tIdx, rowIndex: r,
+          workKind: workKindFor(rt.header, rt.table.rows),
           // Only when this table has no employee column of its own.
           senderEmployee: 'employee' in rt.header.mapping ? '' : senderName },
         masters, cfg, createdEmployees
@@ -415,6 +432,23 @@ export function ingestDocument(
  * is title-cased rather than left as an address, because it becomes an
  * employee name on screen.
  */
+/**
+ * The stream a table's task column describes, read from its own heading.
+ *
+ * A table headed "Tomorrow's Plan" holds plans, and every row in it is a plan
+ * no matter what its status cell says.
+ */
+function workKindFor(
+  header: { mapping: Partial<Record<string, number>>; headerRowIndex: number },
+  rows: { text: string }[][]
+): string {
+  const col = (header.mapping as Record<string, number | undefined>).task;
+  if (col === undefined) return 'REPORTED';
+  const headerRow = rows[header.headerRowIndex];
+  const text = headerRow?.[col]?.text || '';
+  return workKindFromHeader(text);
+}
+
 export function senderDisplayName(from: string): string {
   const raw = cleanWhitespace(from || '');
   if (!raw) return '';

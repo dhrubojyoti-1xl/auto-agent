@@ -116,7 +116,7 @@ export async function rebuildAnalysis(
   ownerUserId: number
 ): Promise<{ tasks: number; repeatGroups: number; slowTasks: number }> {
   const cfg = engineConfig();
-  const tasks = await loadTasks(ownerUserId);
+  const tasks = (await loadTasks(ownerUserId)).filter(t => t.workKind !== 'PLANNED');
   const analysis = analyze(tasks, cfg);
   await writeAnalysisFlags(
     analysis.repeatByTaskId as Map<string, string>,

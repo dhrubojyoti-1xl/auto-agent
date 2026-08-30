@@ -150,7 +150,7 @@ export async function loadTasks(ownerUserId: number): Promise<TaskRecord[]> {
             start_date, start_time, completion_date, completion_time,
             expected_duration, actual_duration, duration_basis, link,
             source_document_id, source_document_date, data_quality_status,
-            data_quality_notes, task_fingerprint, notes
+            data_quality_notes, task_fingerprint, notes, work_kind
      from tasks where owner_user_id = $1
      order by task_date, employee_name, task_id`, [ownerUserId]
   );
@@ -172,6 +172,7 @@ function rowToTask(r: Record<string, unknown>): TaskRecord {
     startTime: time(r.start_time),
     completionDate: r.completion_date ? String(r.completion_date) : null,
     completionTime: time(r.completion_time),
+    workKind: String(r.work_kind ?? 'REPORTED'),
     expectedDuration: num(r.expected_duration), actualDuration: num(r.actual_duration),
     durationBasis: String(r.duration_basis) as TaskRecord['durationBasis'],
     link: String(r.link ?? ''), sourceDocumentId: String(r.source_document_id),
@@ -202,15 +203,16 @@ export async function insertTasks(tasks: TaskRecord[], ownerUserId: number): Pro
            start_date, start_time, completion_date, completion_time,
            expected_duration, actual_duration, duration_basis, link,
            source_document_id, source_document_date, data_quality_status,
-           data_quality_notes, task_fingerprint, notes, owner_user_id)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
+           data_quality_notes, task_fingerprint, notes, owner_user_id, work_kind)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
          on conflict (owner_user_id, task_fingerprint) do nothing`,
         [t.taskId, t.reportId || null, t.date, t.department, t.employeeName, t.employeeId,
          t.task, t.taskNormalized, t.taskCategory || null, t.taskStatus, t.priority || null,
          t.startDate, t.startTime, t.completionDate, t.completionTime,
          t.expectedDuration, t.actualDuration, t.durationBasis, t.link || null,
          t.sourceDocumentId, t.sourceDocumentDate || null, t.dataQualityStatus,
-         t.dataQualityNotes || null, t.taskFingerprint, t.notes || null, ownerUserId]
+         t.dataQualityNotes || null, t.taskFingerprint, t.notes || null, ownerUserId,
+         t.workKind || 'REPORTED']
       );
       written += res.rowCount ?? 0;
     }

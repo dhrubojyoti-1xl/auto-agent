@@ -173,19 +173,53 @@ export function extractPipeTables(text: string): Table[] {
  * Finds the header row and returns the column map, or null when the table is
  * not a report table (a layout table, a signature block, an attendance count).
  */
+/**
+ * Reads one row as a header, mapping each cell to the field it means.
+ */
+function mapOneRow(
+  row: Cell[], masters: Masters, into: Partial<Record<Field, number>> = {}
+): { mapping: Partial<Record<Field, number>>; matches: number } {
+  const mapping = { ...into };
+  let matches = 0;
+  row.forEach((cell, i) => {
+    const field = normalizeHeader(cell.text, masters);
+    if (field && !(field in mapping)) { mapping[field] = i; matches++; }
+  });
+  return { mapping, matches };
+}
+
 export function mapHeaderRow(rows: Cell[][], masters: Masters, cfg: EngineConfig): HeaderMap | null {
   const scanLimit = Math.min(rows.length, 6);
 
   for (let r = 0; r < scanLimit; r++) {
-    const mapping: Partial<Record<Field, number>> = {};
-    let matches = 0;
-    rows[r].forEach((cell, i) => {
-      const field = normalizeHeader(cell.text, masters);
-      if (field && !(field in mapping)) { mapping[field] = i; matches++; }
-    });
+    const { mapping, matches } = mapOneRow(rows[r], masters);
     const hasRequired = REQUIRED.every(f => f in mapping);
     if (matches >= cfg.minHeaderMatches && hasRequired) {
       return { headerRowIndex: r, mapping, matches };
+    }
+  }
+
+  /*
+   * A header split across two rows.
+   *
+   *     |            DAILY REPORT             |          <- title, spans everything
+   *     | Date | Employee Information | Work  |          <- grouping row
+   *     |      | Name | Department     | Task | Status |  <- the real names
+   *
+   * Neither row is a header on its own: the first names groups, the second
+   * names half the columns. Read together they are complete, and a report
+   * written this way is otherwise invisible. The lower row wins any column
+   * both rows claim, because it is the more specific of the two.
+   */
+  for (let r = 0; r + 1 < scanLimit; r++) {
+    const lower = mapOneRow(rows[r + 1], masters);
+    const combined = mapOneRow(rows[r], masters, lower.mapping);
+    const hasRequired = REQUIRED.every(f => f in combined.mapping);
+    const matches = lower.matches + combined.matches;
+    if (hasRequired && matches >= cfg.minHeaderMatches &&
+        lower.matches > 0 && combined.matches > 0) {
+      // Data starts after the LOWER row, not the upper one.
+      return { headerRowIndex: r + 1, mapping: combined.mapping, matches };
     }
   }
   // Relaxed pass: a table missing only ONE required column is still recognised,
