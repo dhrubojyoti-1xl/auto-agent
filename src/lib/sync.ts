@@ -471,8 +471,15 @@ async function readByVision(
   }];
   const signal = detectInTables(tables, masters, cfg);
   if (!signal.isReport) {
+    // What was actually read has to be visible, or a failure here is
+    // undiagnosable: the transcription is discarded and nobody can see which
+    // columns the model returned or why none of them mapped.
     return { skipped: { filename: att.filename, reason: 'IMAGE_NOT_A_REPORT',
-      detail: `${att.filename} was transcribed but is not a report: ${signal.reason}` } };
+      detail: `${att.filename} was transcribed but its columns were not recognised. ` +
+              `Read ${verified.table.rows.length} row(s) under these headings: ` +
+              `${verified.table.headers.map(h => `"${h}"`).join(', ')}. ` +
+              (verified.table.title ? `Title line: "${verified.table.title}". ` : '') +
+              signal.reason } };
   }
 
   return {

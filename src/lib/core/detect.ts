@@ -28,8 +28,9 @@ import { extractPipeTables, extractTables, mapHeaderRow } from './html-table';
  *   2  Google Sheets links followed via their CSV export
  *   3  message classification recorded with evidence
  *   4  images and PDFs transcribed, with structural verification
+ *   5  a failed transcription reports the headings it actually read
  */
-export const DETECTOR_VERSION = 4;
+export const DETECTOR_VERSION = 5;
 
 /**
  * What a message turned out to be.

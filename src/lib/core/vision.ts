@@ -230,7 +230,23 @@ export function dateFromTitle(title: string): { date: string; quote: string } | 
   return { date: iso, quote: title.trim().slice(0, 120) };
 }
 
-/** The transcription as the ordinary table shape, once it has passed every check. */
+/**
+ * The transcription as the ordinary table shape, once it has passed every check.
+ *
+ * A model asked to separate a title from a header row does not always manage
+ * it: a merged banner cell spanning the table can come back as the header,
+ * pushing the real headings down into the first data row. Rather than fail
+ * detection on that, the header row is dropped back into the grid when it
+ * plainly is not one — the downstream mapper scans the first several rows for
+ * a header anyway, so it will find the real one.
+ */
 export function visionTableToRows(table: VisionTable): string[][] {
-  return [table.headers, ...table.rows.map(r => r.map(c => c.text))];
+  const body = table.rows.map(r => r.map(c => c.text));
+  const width = Math.max(...body.map(r => r.length), 0);
+  const headerCells = table.headers.filter(h => h.trim()).length;
+
+  // One heading over a table several columns wide is a banner, not a header.
+  if (width > 1 && headerCells <= 1) return body;
+
+  return [table.headers, ...body];
 }

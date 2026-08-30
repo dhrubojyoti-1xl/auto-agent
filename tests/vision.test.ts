@@ -232,3 +232,30 @@ describe('a status that names the future, and one that names two states', () => 
     expect(res.rejected[0].reason).toBe('UNKNOWN_STATUS');
   });
 });
+
+describe('a banner mistaken for a header row', () => {
+  it('drops a one-cell header over a wide table rather than failing detection', () => {
+    // A merged title cell spanning the table can come back as the header,
+    // pushing the real headings into the first data row.
+    const grid = visionTableToRows({
+      declaredRows: 2, declaredColumns: 4, title: '',
+      headers: ['DAILY WORK UPDATE — 30 AUGUST 2026'],
+      rows: [
+        ['Staff Member', 'Team / Division', 'Work Item', 'Current Status'].map(t => cell(t)),
+        ['Ada Lovelace', 'Sales', 'Call a client', 'Completed'].map(t => cell(t))
+      ]
+    });
+    expect(grid[0]).toEqual(['Staff Member', 'Team / Division', 'Work Item', 'Current Status']);
+    expect(grid).toHaveLength(2);
+  });
+
+  it('keeps a proper header row untouched', () => {
+    const grid = visionTableToRows({
+      declaredRows: 1, declaredColumns: 4, title: 'x',
+      headers: ['Staff Member', 'Team / Division', 'Work Item', 'Current Status'],
+      rows: [['Ada Lovelace', 'Sales', 'Call a client', 'Completed'].map(t => cell(t))]
+    });
+    expect(grid).toHaveLength(2);
+    expect(grid[0][0]).toBe('Staff Member');
+  });
+});

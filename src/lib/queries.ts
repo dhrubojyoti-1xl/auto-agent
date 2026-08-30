@@ -426,9 +426,17 @@ export async function getMessageOutcomes(ownerUserId: number, limit = 50) {
             coalesce(classification, 'NON_REPORT') as classification,
             evidence, rows_inserted, rows_rejected, attachment_name,
             prefilter_score, prefilter_signals
-     from documents
+     from documents d
      where owner_user_id = $1
        and coalesce(classification, 'NON_REPORT') <> 'DEPARTMENTAL_REPORT'
+       -- A message whose attachment or linked sheet became a report is a
+       -- report. Listing its body separately as "not a report" reads as a
+       -- contradiction with the line above it.
+       and not exists (
+         select 1 from documents s
+          where s.owner_user_id = d.owner_user_id
+            and s.gmail_message_id = d.gmail_message_id
+            and s.rows_inserted > 0)
      order by received_at desc nulls last, processed_at desc
      limit $2`, [ownerUserId, limit]);
   return rows.map(r => ({
@@ -504,7 +512,14 @@ export async function getInboxMessages(ownerUserId: number, limit = 15) {
             coalesce(classification, 'NON_REPORT') as classification,
             confidence, evidence, department, rows_extracted, rows_inserted,
             rows_rejected, attachment_name, departments_count, departments_list
-     from documents where owner_user_id = $1
+     from documents d
+     where owner_user_id = $1
+       and not exists (
+         select 1 from documents s
+          where s.owner_user_id = d.owner_user_id
+            and s.gmail_message_id = d.gmail_message_id
+            and s.rows_inserted > 0
+            and s.report_id <> d.report_id)
      -- Reports and unfinished business first, newsletters last. Strict
      -- chronological order buries the one report of the day under whatever
      -- marketing arrived after it, which is exactly what a manager opening
