@@ -3,6 +3,8 @@ import Nav from '../nav';
 import { getSession } from '@/lib/auth';
 import { getUser } from '@/lib/users';
 import { listGmailAccounts, listSyncRuns } from '@/lib/accounts';
+import { getInboxMessages } from '@/lib/queries';
+import { getCoverage } from '@/lib/analytics';
 import { googleConfigured } from '@/lib/google-oauth';
 import ConnectControls from './controls';
 import SchemaControls from './schema-controls';
@@ -33,11 +35,14 @@ export default async function ConnectPage({
   let accounts: Awaited<ReturnType<typeof listGmailAccounts>> = [];
   let runs: Awaited<ReturnType<typeof listSyncRuns>> = [];
   let schema: Awaited<ReturnType<typeof getSchemaStatus>> | null = null;
+  let messages: Awaited<ReturnType<typeof getInboxMessages>> = [];
+  let coverage: Awaited<ReturnType<typeof getCoverage>> | null = null;
   let dbError = '';
   try {
-    [accounts, runs, schema] = await Promise.all([
+    [accounts, runs, schema, messages, coverage] = await Promise.all([
       listGmailAccounts(session.userId), listSyncRuns(session.userId, 10),
-      getSchemaStatus()
+      getSchemaStatus(), getInboxMessages(session.userId, 15),
+      getCoverage(session.userId)
     ]);
   } catch (e) {
     dbError = safeErrorMessage(e);
@@ -185,6 +190,49 @@ export default async function ConnectPage({
             <li>Updates the dashboard and regenerates the management summary.</li>
           </ol>
         </div>
+
+        {coverage && coverage.messagesScanned > 0 && (
+          <>
+            <h2>What the assistant made of each message</h2>
+            <p className="small muted">
+              The verdict, not the correspondence. This is not a mail client and does not
+              show message contents.
+            </p>
+            <div className="msg-list">
+              {messages.map((m, i) => {
+                const kind = m.classification === 'DEPARTMENTAL_REPORT' ? 'report'
+                  : m.classification === 'REVIEW_REQUIRED' ? 'review'
+                  : m.classification === 'UNSUPPORTED_FORMAT' ? 'unsupported'
+                  : m.classification === 'POSSIBLE_REPORT' ? 'review' : 'none';
+                const LABEL = { report: 'Report', review: 'Needs a look',
+                                unsupported: 'Format not readable', none: 'Not a report' };
+                return (
+                  <div className={`msg ${kind}`} key={i}>
+                    <div className="msg-head">
+                      <span className={'badge ' + (kind === 'report' ? 'completed'
+                        : kind === 'review' ? 'review'
+                        : kind === 'unsupported' ? 'pending' : 'cancelled')}>
+                        {LABEL[kind]}
+                      </span>
+                      <strong className="subj">{m.subject.slice(0, 78)}</strong>
+                      <span className="when">{formatStamp(m.receivedAt, '')}</span>
+                    </div>
+                    <div className="msg-body small muted">
+                      <span>{m.sender.slice(0, 46)}</span>
+                      {m.attachment && <span> · {m.attachment}</span>}
+                      {kind === 'report' && (
+                        <span> · imported <strong>{m.imported}</strong> of {m.extracted} row(s)
+                          {m.rejected > 0 && <> · {m.rejected} rejected</>}
+                        </span>
+                      )}
+                      {kind !== 'report' && m.evidence && <span> · {m.evidence.slice(0, 140)}</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
 
         <h2>Recent activity</h2>
         {runs.length === 0 ? (

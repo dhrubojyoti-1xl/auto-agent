@@ -475,3 +475,46 @@ export async function getRecentImports(ownerUserId: number, limit = 8) {
     attachment: String(r.attachment_name ?? '')
   }));
 }
+
+/**
+ * What the assistant made of each recent message, for the Inbox page.
+ *
+ * The Inbox is not a mail client and must not become one: this shows the
+ * verdict, not the correspondence. A manager needs to know that Monday's
+ * report was read and eighteen rows landed, and that a spreadsheet could not
+ * be opened — not to browse their newsletters.
+ */
+export async function getInboxMessages(ownerUserId: number, limit = 15) {
+  const rows = await query<Record<string, string | number | null>>(
+    `select subject, sender, received_at, processing_status,
+            coalesce(classification, 'NON_REPORT') as classification,
+            confidence, evidence, department, rows_extracted, rows_inserted,
+            rows_rejected, attachment_name
+     from documents where owner_user_id = $1
+     -- Reports and unfinished business first, newsletters last. Strict
+     -- chronological order buries the one report of the day under whatever
+     -- marketing arrived after it, which is exactly what a manager opening
+     -- this page does not want to see.
+     order by case coalesce(classification, 'NON_REPORT')
+                when 'DEPARTMENTAL_REPORT' then 0
+                when 'REVIEW_REQUIRED'     then 1
+                when 'UNSUPPORTED_FORMAT'  then 2
+                when 'POSSIBLE_REPORT'     then 3
+                else 4 end,
+              received_at desc nulls last, processed_at desc
+     limit $2`, [ownerUserId, limit]);
+  return rows.map(r => ({
+    subject: String(r.subject ?? '(no subject)'),
+    sender: String(r.sender ?? ''),
+    receivedAt: r.received_at ? String(r.received_at) : '',
+    classification: String(r.classification),
+    confidence: r.confidence === null || r.confidence === undefined
+      ? null : Number(r.confidence),
+    evidence: String(r.evidence ?? ''),
+    department: String(r.department ?? ''),
+    extracted: Number(r.rows_extracted ?? 0),
+    imported: Number(r.rows_inserted ?? 0),
+    rejected: Number(r.rows_rejected ?? 0),
+    attachment: String(r.attachment_name ?? '')
+  }));
+}

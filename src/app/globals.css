@@ -393,3 +393,36 @@ a.card-link:hover .dept-card,
 }
 nav.top a.secondary-link { opacity: .62; }
 nav.top a.secondary-link:hover { opacity: 1; }
+
+/* ---- loading ------------------------------------------------------ */
+.skeleton {
+  background: linear-gradient(90deg,
+    var(--panel-2) 25%, color-mix(in srgb, var(--border) 55%, var(--panel-2)) 37%,
+    var(--panel-2) 63%);
+  background-size: 400% 100%;
+  border-radius: var(--radius-sm);
+  animation: shimmer 1.4s ease infinite;
+}
+@keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* ---- inbox message verdicts -------------------------------------- */
+.msg-list { display: grid; gap: .4rem; }
+.msg {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4); background: var(--panel);
+  border-left: 3px solid var(--st-neutral);
+}
+.msg.report { border-left-color: var(--st-completed); }
+.msg.review { border-left-color: var(--st-review); }
+.msg.unsupported { border-left-color: var(--st-pending); }
+.msg-head { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; }
+.msg-head .subj { font-weight: 560; font-size: var(--text-md); min-width: 0;
+                  overflow-wrap: anywhere; }
+.msg-head .when { margin-left: auto; color: var(--muted); font-size: var(--text-xs);
+                  white-space: nowrap; }
+.msg-body { margin-top: .25rem; overflow-wrap: anywhere; }

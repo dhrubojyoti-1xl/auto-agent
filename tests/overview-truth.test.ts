@@ -144,3 +144,57 @@ d('repeated work is described as work, not as a fault', () => {
     expect(kpis.repeatAttention).toBe(0);
   });
 });
+
+d('the Inbox shows the report, not the marketing', () => {
+  let db: any, seedDb: any, q: any;
+  const UID = 1;
+
+  beforeAll(async () => {
+    db = await import('../src/lib/db');
+    seedDb = await import('../src/lib/seed-db');
+    q = await import('../src/lib/queries');
+    await resetDatabase(db, seedDb, { demo: false });
+
+    // The report arrives first; nine newsletters arrive after it.
+    await db.query(
+      `insert into documents (report_id, document_id, source, subject, sender, received_at,
+         processing_status, tables_found, rows_extracted, rows_inserted,
+         rows_skipped_idempotent, rows_rejected, owner_user_id, classification, processed_at)
+       values ('R1','d1','email','Daily report','r@co.com', now() - interval '3 hours',
+               'SUCCESS',1,47,47,0,0,$1,'DEPARTMENTAL_REPORT', now() - interval '3 hours')`,
+      [UID]);
+    await db.query(
+      `insert into documents (report_id, document_id, source, subject, sender, received_at,
+         processing_status, tables_found, rows_extracted, rows_inserted,
+         rows_skipped_idempotent, rows_rejected, owner_user_id, classification, processed_at)
+       values ('R2','d2','email','Screenshot of report','s@co.com', now() - interval '2 hours',
+               'NO_DATA',0,0,0,0,0,$1,'REVIEW_REQUIRED', now() - interval '2 hours')`, [UID]);
+    for (let i = 0; i < 9; i++) {
+      await db.query(
+        `insert into documents (report_id, document_id, source, subject, sender, received_at,
+           processing_status, tables_found, rows_extracted, rows_inserted,
+           rows_skipped_idempotent, rows_rejected, owner_user_id, classification, processed_at)
+         values ($1,$2,'email',$3,'news@x.com', now(),'NO_DATA',0,0,0,0,0,$4,
+                 'NON_REPORT', now())`,
+        [`N${i}`, `dn${i}`, `New SaaS listing ${i}`, UID]);
+    }
+  });
+
+  it('lists the report first even though it is the oldest message', async () => {
+    const msgs = await q.getInboxMessages(UID, 15);
+    expect(msgs[0].subject).toBe('Daily report');
+    expect(msgs[0].classification).toBe('DEPARTMENTAL_REPORT');
+  });
+
+  it('puts what needs a person above what was ruled out', async () => {
+    const msgs = await q.getInboxMessages(UID, 15);
+    const review = msgs.findIndex((m: any) => m.classification === 'REVIEW_REQUIRED');
+    const ignored = msgs.findIndex((m: any) => m.classification === 'NON_REPORT');
+    expect(review).toBeLessThan(ignored);
+  });
+
+  it('still shows the newsletters, so nothing looks hidden', async () => {
+    const msgs = await q.getInboxMessages(UID, 15);
+    expect(msgs.filter((m: any) => m.classification === 'NON_REPORT').length).toBe(9);
+  });
+});
