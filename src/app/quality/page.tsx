@@ -131,7 +131,8 @@ export default async function QualityPage() {
             <div className="table-wrap">
               <table>
                 <thead>
-                  <tr><th>Received</th><th>From</th><th>Subject</th><th>Why</th></tr>
+                  <tr><th>Received</th><th>From</th><th>Subject</th><th>Why</th>
+                      <th className="num">Score</th></tr>
                 </thead>
                 <tbody>
                   {settled.slice(0, 25).map((o, i) => (
@@ -139,7 +140,19 @@ export default async function QualityPage() {
                       <td className="small">{formatDay(o.receivedAt)}</td>
                       <td className="small">{o.sender.slice(0, 40)}</td>
                       <td className="small">{o.subject.slice(0, 60)}</td>
-                      <td className="small muted">{o.evidence}</td>
+                      <td className="small muted">
+                        {o.evidence}
+                        {/* The signals that decided it, so a report ignored by
+                            mistake can be argued with rather than guessed at. */}
+                        {o.prefilterSignals && (
+                          <div className="small muted" style={{ marginTop: '.2rem' }}>
+                            {o.prefilterSignals}
+                          </div>
+                        )}
+                      </td>
+                      <td className="num small muted">
+                        {o.prefilterScore === null ? '—' : o.prefilterScore}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

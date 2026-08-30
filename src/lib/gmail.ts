@@ -49,6 +49,8 @@ export interface GmailMessage {
   text: string;
   attachments: GmailAttachment[];
   labelIds: string[];
+  /** Header names only — a bulk sender is identified by List-Unsubscribe existing. */
+  headerNames: string[];
 }
 
 async function api<T>(path: string, accessToken: string): Promise<T> {
@@ -171,7 +173,8 @@ export async function getMessage(accessToken: string, id: string): Promise<Gmail
     html: acc.html.join('\n'),
     text: acc.text.join('\n'),
     attachments: acc.attachments,
-    labelIds: msg.labelIds || []
+    labelIds: msg.labelIds || [],
+    headerNames: (h || []).map(x => x.name)
   };
 }
 

@@ -29,9 +29,12 @@ import { ingestDocument } from './core/ingest';
 import { parseDate } from './core/normalize';
 import type { SourceDocument } from './core/types';
 import {
-  insertRejections, insertTasks, loadFingerprints, loadMasters, loadTasks,
-  logEvent, query, replaceRepeatGroups, upsertEmployees, writeAnalysisFlags
+  insertRejections, insertTasks, loadFingerprints, loadMasters, loadPrefilterRules,
+  loadProductiveThreads, loadTasks, loadTenantIdentity, logEvent, query,
+  replaceRepeatGroups, upsertEmployees, writeAnalysisFlags
 } from './db';
+import { scoreMessage } from './core/prefilter';
+import type { PrefilterVerdict } from './core/prefilter';
 import { getAttachment, getMessage, listMessageIds } from './gmail';
 import type { GmailMessage } from './gmail';
 import { engineConfig } from './pipeline';
@@ -56,6 +59,8 @@ export interface SyncSummary {
   rowsImported: number;
   rowsRejected: number;
   rowsDuplicate: number;
+  /** Messages the prefilter decided were not worth opening. */
+  messagesDropped?: number;
   errors: string[];
   details: { subject: string; from: string; source: string; imported: number; rejected: number; reason: string }[];
 }
@@ -113,6 +118,12 @@ export async function syncAccount(account: GmailAccount, trigger: string): Promi
     const masters = await loadMasters();
     const fingerprints = await loadFingerprints(owner);
     const seen = await loadSeenMessageIds(owner);
+    // Loaded once per run: a working mailbox is mostly not reports, and every
+    // message that reaches extraction costs an attachment download, a parse,
+    // and now a vision call for anything carrying a picture.
+    const [rules, identity, productiveThreads] = await Promise.all([
+      loadPrefilterRules(), loadTenantIdentity(owner), loadProductiveThreads(owner)
+    ]);
 
     const query_ = buildGmailQuery(account.syncSince, process.env.GMAIL_EXTRA_QUERY || '');
     let ids: string[];
@@ -133,10 +144,34 @@ export async function syncAccount(account: GmailAccount, trigger: string): Promi
       summary.messagesScanned++;
       try {
         const msg = await getMessage(accessToken, id);
+
+        // Decided before anything is downloaded or transcribed.
+        const verdict = rules.length ? scoreMessage({
+          subject: msg.subject, from: msg.from,
+          bodyText: msg.text, bodyHtml: msg.html,
+          headerNames: msg.headerNames, labelIds: msg.labelIds,
+          attachments: msg.attachments.map(a => ({
+            filename: a.filename, mimeType: a.mimeType, size: a.size })),
+          tenantDomains: identity.domains, rosterKeys: identity.rosterKeys,
+          ownAddress: account.email.toLowerCase(),
+          threadProducedReport: productiveThreads.has(msg.threadId)
+        }, rules) : { score: 99, band: 'FORCE' as const, signals: ['prefilter not configured'] };
+
+        // The band gates the EXPENSIVE work, not the message.
+        //
+        // Reading a body table or a spreadsheet is a cheap deterministic parse
+        // and dropping a message to avoid it risks losing a real report to save
+        // nothing. Transcribing a picture is a paid model call, and a
+        // promotional email with a banner image is that call repeated daily
+        // for ever. So every message is still read; only vision is rationed.
+        if (verdict.band === 'DROP') summary.messagesDropped =
+          (summary.messagesDropped || 0) + 1;
+
         const skipped: SkippedAttachment[] = [];
         const bodySignal = { reason: '', confidence: 0 };
         const documents = await documentsFromMessage(
-          msg, accessToken, masters, cfg, skipped, bodySignal);
+          msg, accessToken, masters, cfg, skipped, bodySignal,
+          verdict.band !== 'DROP');
 
         if (skipped.length) {
           await recordSkippedAttachments(owner, msg, skipped);
@@ -148,7 +183,7 @@ export async function syncAccount(account: GmailAccount, trigger: string): Promi
           // found" and "something was found and could not be read" are
           // different outcomes and must not look the same.
           const { classification, evidence } = classifyUnprocessed(skipped, bodySignal);
-          await recordNonReport(account.id, owner, msg, evidence, classification);
+          await recordNonReport(account.id, owner, msg, evidence, classification, verdict);
           continue;
         }
 
@@ -224,7 +259,9 @@ async function documentsFromMessage(
   masters: Awaited<ReturnType<typeof loadMasters>>,
   cfg: ReturnType<typeof engineConfig>,
   skipped: SkippedAttachment[],
-  bodySignal: { reason: string; confidence: number }
+  bodySignal: { reason: string; confidence: number },
+  /** False when the prefilter judged this message not worth a paid model call. */
+  visionAllowed: boolean
 ): Promise<SourceDocument[]> {
   const docs: SourceDocument[] = [];
 
@@ -258,7 +295,8 @@ async function documentsFromMessage(
       const worthReading = media && (
         media === 'application/pdf' || looksLikeReportImage(att.filename, att.mimeType, att.size));
 
-      if (worthReading && visionAvailable() && att.size <= MAX_ATTACHMENT_BYTES) {
+      if (worthReading && visionAllowed && visionAvailable() &&
+          att.size <= MAX_ATTACHMENT_BYTES) {
         const outcome = await readByVision(
           att, msg, accessToken, masters, cfg, media as string);
         if (outcome.doc) { docs.push(outcome.doc); continue; }
@@ -274,11 +312,15 @@ async function documentsFromMessage(
         });
       } else if (looksLikeReportImage(att.filename, att.mimeType, att.size)) {
         skipped.push({
-          filename: att.filename, reason: 'IMAGE_REVIEW_REQUIRED',
-          detail: `A report may have been sent as a screenshot: ${att.filename}. Images ` +
-                  `are not read automatically, because the figures would have to be ` +
-                  `guessed from pixels and a management report cannot rest on that. ` +
-                  `Send the underlying spreadsheet, or paste the table into the email.`
+          filename: att.filename,
+          reason: visionAllowed ? 'IMAGE_REVIEW_REQUIRED' : 'IMAGE_NOT_WORTH_READING',
+          detail: visionAllowed
+            ? `A report may have been sent as a screenshot: ${att.filename}. It could not ` +
+              `be transcribed, so nothing was imported from it. Send the underlying ` +
+              `spreadsheet, or paste the table into the email.`
+            : `${att.filename} is an image in a message that shows no other sign of being ` +
+              `a report, so it was not transcribed. If this is a report, reply to it or ` +
+              `give it a subject mentioning the work, and it will be read next time.`
         });
       }
       // Anything else — a logo, a signature image, a tracking pixel — is
@@ -533,23 +575,31 @@ async function loadSeenMessageIds(ownerUserId: number): Promise<Set<string>> {
 
 async function recordNonReport(
   accountId: number, ownerUserId: number, msg: GmailMessage, reason: string,
-  classification: MessageClassification = 'NON_REPORT'
+  classification: MessageClassification = 'NON_REPORT',
+  verdict?: PrefilterVerdict
 ): Promise<void> {
   await query(
     `insert into documents (report_id, document_id, source, subject, sender, sender_domain,
        received_at, processing_status, tables_found, rows_extracted, rows_inserted,
        rows_skipped_idempotent, rows_rejected, error_message, gmail_account_id,
-       gmail_message_id, owner_user_id, detector_version, classification, evidence)
-     values ($1,$2,'email',$3,$4,$5,$6,'NO_DATA',0,0,0,0,0,$7,$8,$9,$10,$11,$12,$13)
+       gmail_message_id, owner_user_id, detector_version, classification, evidence,
+       prefilter_score, prefilter_signals, gmail_thread_id)
+     values ($1,$2,'email',$3,$4,$5,$6,'NO_DATA',0,0,0,0,0,$7,$8,$9,$10,$11,$12,$13,
+             $14,$15,$16)
      on conflict (owner_user_id, report_id) do update set
        error_message = excluded.error_message,
        processed_at = now(),
        detector_version = excluded.detector_version,
        classification = excluded.classification,
-       evidence = excluded.evidence`,
+       evidence = excluded.evidence,
+       prefilter_score = excluded.prefilter_score,
+       prefilter_signals = excluded.prefilter_signals,
+       gmail_thread_id = excluded.gmail_thread_id`,
     [`GM-${msg.id}`, `gmail:${msg.id}`, msg.subject.slice(0, 300), msg.from,
      senderDomain(msg.from), msg.date, reason, accountId, msg.id, ownerUserId,
-     DETECTOR_VERSION, classification, reason.slice(0, 500)]
+     DETECTOR_VERSION, classification, reason.slice(0, 500),
+     verdict?.score ?? null, verdict?.signals.join(' · ').slice(0, 300) ?? null,
+     msg.threadId || null]
   );
 }
 

@@ -424,7 +424,8 @@ export async function getMessageOutcomes(ownerUserId: number, limit = 50) {
   const rows = await query<Record<string, string | number | null>>(
     `select subject, sender, received_at, processing_status,
             coalesce(classification, 'NON_REPORT') as classification,
-            evidence, rows_inserted, rows_rejected, attachment_name
+            evidence, rows_inserted, rows_rejected, attachment_name,
+            prefilter_score, prefilter_signals
      from documents
      where owner_user_id = $1
        and coalesce(classification, 'NON_REPORT') <> 'DEPARTMENTAL_REPORT'
@@ -438,8 +439,9 @@ export async function getMessageOutcomes(ownerUserId: number, limit = 50) {
     evidence: String(r.evidence ?? ''),
     rejected: Number(r.rows_rejected ?? 0),
     attachment: String(r.attachment_name ?? ''),
-    departmentsCount: Number(r.departments_count ?? 0),
-    departmentsList: String(r.departments_list ?? '')
+    prefilterScore: r.prefilter_score === null || r.prefilter_score === undefined
+      ? null : Number(r.prefilter_score),
+    prefilterSignals: String(r.prefilter_signals ?? '')
   }));
 }
 

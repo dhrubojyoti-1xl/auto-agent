@@ -8,6 +8,7 @@
  * per-request isolation.
  */
 import { Pool, types } from 'pg';
+import type { PrefilterRule } from './core/prefilter';
 import type { RejectedRow, TaskRecord } from './core/types';
 import type { RepeatGroup } from './core/analysis';
 
@@ -396,4 +397,66 @@ export async function logEvent(
   } catch {
     // Logging must never take the request down with it.
   }
+}
+
+/**
+ * The prefilter rules, as configured. Loaded once per sync rather than per
+ * message: the table is small and does not change mid-run.
+ */
+export async function loadPrefilterRules(): Promise<PrefilterRule[]> {
+  const rows = await query<Record<string, unknown>>(
+    `select rule_id, signal, kind, pattern, weight, cap, active
+     from prefilter_rules where active order by rule_id`);
+  return rows.map(r => ({
+    ruleId: String(r.rule_id), signal: String(r.signal),
+    kind: String(r.kind) as PrefilterRule['kind'],
+    pattern: r.pattern === null ? null : String(r.pattern),
+    weight: Number(r.weight),
+    cap: r.cap === null || r.cap === undefined ? null : Number(r.cap),
+    active: Boolean(r.active)
+  }));
+}
+
+/**
+ * The identity signals a message is scored against: which domains are ours and
+ * who is already on the roster.
+ */
+export async function loadTenantIdentity(ownerUserId: number): Promise<{
+  domains: string[]; rosterKeys: string[];
+}> {
+  const [accounts, employees, departments] = await Promise.all([
+    query<{ email: string }>(
+      `select email from gmail_accounts where owner_user_id = $1 and active`, [ownerUserId]),
+    query<{ employee_name: string; email: string | null }>(
+      `select employee_name, email from employees where active`),
+    query<{ sender_domains: string[] }>(
+      `select sender_domains from departments where active`)
+  ]);
+  const domains = new Set<string>();
+  for (const a of accounts) {
+    const d = String(a.email || '').split('@')[1];
+    // A personal mailbox domain is everybody's domain and identifies nothing.
+    if (d && !/^(gmail|googlemail|outlook|hotmail|yahoo|icloud|proton(mail)?)\./.test(d + '.')) {
+      domains.add(d.toLowerCase());
+    }
+  }
+  for (const d of departments) for (const s of d.sender_domains || []) {
+    if (s) domains.add(String(s).toLowerCase());
+  }
+  const rosterKeys = new Set<string>();
+  for (const e of employees) {
+    if (e.email) rosterKeys.add(String(e.email).toLowerCase());
+    const name = String(e.employee_name || '').toLowerCase().trim();
+    if (name.length > 4) rosterKeys.add(name);
+  }
+  return { domains: [...domains], rosterKeys: [...rosterKeys] };
+}
+
+/** Thread ids that have already produced an imported report for this user. */
+export async function loadProductiveThreads(ownerUserId: number): Promise<Set<string>> {
+  const rows = await query<{ gmail_thread_id: string }>(
+    `select distinct gmail_thread_id from documents
+     where owner_user_id = $1 and gmail_thread_id is not null and rows_inserted > 0`,
+    [ownerUserId]);
+  return new Set(rows.map(r => r.gmail_thread_id));
 }
