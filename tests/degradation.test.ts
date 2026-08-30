@@ -60,14 +60,16 @@ describe('rate limits protect quota without obstructing a person', () => {
     expect(rateLimit('sync:2', LIMITS.sync.limit, 60_000).ok).toBe(true);
   });
 
-  it('lets the window expire rather than blocking for ever', () => {
+  it('lets the window expire rather than blocking for ever', async () => {
     resetRateLimits();
-    expect(rateLimit('sync:3', 1, 1).ok).toBe(true);
-    expect(rateLimit('sync:3', 1, 1).ok).toBe(false);
-    return new Promise<void>(r => setTimeout(() => {
-      expect(rateLimit('sync:3', 1, 1).ok).toBe(true);
-      r();
-    }, 12));
+    // The window has to be long enough that the second call is reliably
+    // inside it. A 1ms window can expire between two adjacent statements,
+    // which makes the test fail for a reason that is not the behaviour.
+    const WINDOW = 60;
+    expect(rateLimit('sync:3', 1, WINDOW).ok).toBe(true);
+    expect(rateLimit('sync:3', 1, WINDOW).ok).toBe(false);
+    await new Promise(r => setTimeout(r, WINDOW + 40));
+    expect(rateLimit('sync:3', 1, WINDOW).ok).toBe(true);
   });
 });
 

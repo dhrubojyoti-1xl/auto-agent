@@ -367,8 +367,16 @@ function classifyUnprocessed(
   if (reasons.includes('ATTACHMENT_FORMAT_UNSUPPORTED')) {
     return { classification: 'UNSUPPORTED_FORMAT', evidence: details };
   }
-  if (reasons.some(r => r.startsWith('ATTACHMENT_') || r.startsWith('SHEET_'))) {
+  // "I read it and it is not a report" is a decision. Only "I could not read
+  // it" needs a person. Treating an unrelated budget spreadsheet as a review
+  // case fills the queue with noise, and a queue full of noise gets ignored.
+  const unreadable = reasons.filter(r =>
+    r !== 'ATTACHMENT_NOT_A_REPORT' && r !== 'SHEET_NOT_A_REPORT' && r !== 'SHEET_EMPTY');
+  if (unreadable.length) {
     return { classification: 'REVIEW_REQUIRED', evidence: details };
+  }
+  if (reasons.length) {
+    return { classification: 'NON_REPORT', evidence: details };
   }
   // A table was found and its columns were not a report's. That is a decision,
   // not a failure — an invoice reaches here, and so does a newsletter.
