@@ -32,7 +32,9 @@ export async function GET() {
     }
   } catch (e) {
     checks.database = 'error';
-    checks.detail = (e as Error).message.slice(0, 120);
+    // The message can name the host, the database and the role, so it is for
+    // the signed-in operator only. Anonymous callers get the status alone.
+    if (session) checks.detail = (e as Error).message.slice(0, 120);
   }
   // Which build is actually serving this request. Without it, "I deployed the
   // fix" and "the fix is live" are two different claims with no way to tell

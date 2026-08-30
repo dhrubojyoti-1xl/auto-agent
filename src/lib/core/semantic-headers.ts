@@ -45,7 +45,10 @@ const SIGNALS: Record<string, { strong: string[]; weak: string[]; against?: stri
   department: {
     strong: ['department', 'dept', 'dpt', 'division', 'unit', 'vertical',
              'departamento', 'abteilung', 'vibhag'],
-    weak: ['team', 'function', 'group', 'section'],
+    // 'area' is weak on purpose: "Business Area" and "Functional Area" are
+    // ordinary names for a department, but an area can equally be a place.
+    // Weak means the column's own values have to agree before it counts.
+    weak: ['team', 'function', 'group', 'section', 'area'],
     against: ['member', 'lead', 'head', 'size']
   },
   task: {
