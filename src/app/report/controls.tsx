@@ -26,6 +26,16 @@ export default function ReportControls({ aiConfigured }: { aiConfigured: boolean
           setDone(`Re-analysed ${json.tasks} task(s): ${json.repeatGroups} repeat ` +
                   `group(s), ${json.slowTasks} slow task(s).`);
         }
+        if (label === 'report') {
+          // Saying so matters: otherwise a reused commentary looks like a
+          // button that did nothing.
+          setDone(json.generator === 'ai:cached'
+            ? 'The figures have not changed, so the existing commentary was reused. ' +
+              'Use "Rewrite commentary" to spend a fresh AI call anyway.'
+            : json.generator === 'ai:anthropic'
+              ? 'Report generated with AI commentary.'
+              : 'Report generated. ' + (json.validationError || 'Without AI commentary.'));
+        }
         router.refresh();
       }
     } catch (e) {
@@ -51,6 +61,12 @@ export default function ReportControls({ aiConfigured }: { aiConfigured: boolean
                 onClick={() => post('/api/report', { type, useAi }, 'report')}>
           {busy === 'report' ? 'Generating…' : 'Generate report'}
         </button>
+        {aiConfigured && useAi && (
+          <button className="secondary" disabled={!!busy}
+                  onClick={() => post('/api/report', { type, useAi, force: true }, 'report')}>
+            {busy === 'report' ? 'Rewriting…' : 'Rewrite commentary'}
+          </button>
+        )}
         <button className="secondary" disabled={!!busy}
                 onClick={() => post('/api/rebuild', {}, 'rebuild')}>
           {busy === 'rebuild' ? 'Rebuilding…' : 'Rebuild analysis'}

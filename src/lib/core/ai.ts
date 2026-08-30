@@ -10,10 +10,10 @@
  *   3. If the model is disabled, unreachable, or returns nonsense twice, a full
  *      report is still produced from the deterministic layer.
  */
-import type { AnalysisResult, RepeatGroup, SlowTask } from './analysis';
+import type { AnalysisResult, SlowTask } from './analysis';
 import type { Bucket, DepartmentRow, EmployeeRow } from './metrics';
 import { bucketFor } from './metrics';
-import type { EngineConfig, TaskRecord } from './types';
+import type { TaskRecord } from './types';
 import { addDays, daysBetween, keyify, normalizeTask, ppChange } from './normalize';
 
 export type ReportType = 'DAILY' | 'WEEKLY' | 'MONTHLY';
@@ -221,6 +221,84 @@ const asString = (v: unknown): string => typeof v === 'string' ? v.trim() : '';
  * Returns the commentary with every unsupportable claim removed, plus the list
  * of what was removed so it can be disclosed to the reader.
  */
+/**
+ * Every number that appears anywhere in the dataset, as a string, so a number
+ * written in prose can be checked against something the application computed.
+ *
+ * Percentages are stored at one decimal and as a whole number, because a model
+ * that is handed 57.1 will often write "57%" and that is not a fabrication.
+ */
+function groundedNumbers(dataset: AiDataset): Set<string> {
+  const out = new Set<string>();
+  const add = (n: number | null | undefined) => {
+    if (n === null || n === undefined || isNaN(n)) return;
+    out.add(String(n));
+    out.add(String(Math.round(n)));
+    out.add(n.toFixed(1));
+    out.add(String(Math.abs(n)));
+    out.add(String(Math.round(Math.abs(n))));
+  };
+  const addBucket = (b: Bucket) => {
+    add(b.total); add(b.completed); add(b.inProgress); add(b.pending);
+    add(b.blocked); add(b.cancelled); add(b.notStarted);
+    add(b.completionRate); add(b.pendingRate);
+    add(b.slowTasks); add(b.repeatedTasks); add(b.employeesReporting);
+    add(b.dates.length);
+  };
+
+  addBucket(dataset.totals);
+  addBucket(dataset.comparisonTotals);
+  add(dataset.completionRateChangePercentagePoints);
+  dataset.departments.forEach(addBucket);
+  dataset.employees.forEach(addBucket);
+  dataset.categories.forEach(addBucket);
+  add(dataset.departments.length);
+  add(dataset.employees.length);
+  add(dataset.slowTasks.length);
+  add(dataset.repeatedTasks.length);
+  dataset.slowTasks.forEach(t => {
+    add(t.actualDuration); add(t.expectedDuration);
+    add(t.varianceHours); add(t.variancePct); add(t.baselineSampleSize);
+  });
+  dataset.repeatedTasks.forEach(r => { add(r.occurrences); add(r.distinctDates); });
+  const dq = dataset.dataQuality;
+  add(dq.tasksInPeriod); add(dq.rowsRejectedInPeriod); add(dq.tasksMissingLink);
+  add(dq.tasksFlaggedForReview); add(dq.tasksWithoutDurationData);
+  add(dq.uncategorisedTasks);
+  Object.values(dq.rejectionReasons).forEach(add);
+  return out;
+}
+
+/**
+ * Finds numbers in a sentence that the dataset cannot account for.
+ *
+ * The structured fields were already checked field by field, but the prose was
+ * not, and prose is exactly where an invented figure survives: "Sales completed
+ * 92% of its tasks" reads as authoritative and is not attached to any field the
+ * schema constrains. Anything that does not match a computed value is treated
+ * as unsupported.
+ *
+ * Years, ordinals and small counting words are ignored — "the last 3 weeks" is
+ * not a claim about the data, and flagging it would train the reader to ignore
+ * the warnings that matter.
+ */
+export function ungroundedNumbers(text: string, grounded: Set<string>): string[] {
+  const bad: string[] = [];
+  const seen = new Set<string>();
+  for (const m of (text || '').matchAll(/(\d+(?:\.\d+)?)\s*%?/g)) {
+    const raw = m[1];
+    const n = Number(raw);
+    if (isNaN(n)) continue;
+    if (n <= 12 && Number.isInteger(n)) continue;        // ordinary counting words
+    if (n >= 1900 && n <= 2200 && Number.isInteger(n)) continue;   // a year
+    if (grounded.has(raw) || grounded.has(String(n)) || grounded.has(n.toFixed(1))) continue;
+    if (seen.has(raw)) continue;
+    seen.add(raw);
+    bad.push(m[0].trim());
+  }
+  return bad;
+}
+
 export function validateAiJson(
   json: unknown, dataset: AiDataset
 ): { ok: boolean; errors: string[]; commentary: AiCommentary } {
@@ -236,7 +314,16 @@ export function validateAiJson(
   }
   const j = json as Record<string, unknown>;
 
-  commentary.summary = asString(j.summary);
+  const grounded = groundedNumbers(dataset);
+  /** Keeps prose only if every number in it came from the dataset. */
+  const keepIfGrounded = (text: string, where: string): string => {
+    const bad = ungroundedNumbers(text, grounded);
+    if (!bad.length) return text;
+    errors.push(`Removed ${where}: cites ${bad.join(', ')}, which the dataset does not contain`);
+    return '';
+  };
+
+  commentary.summary = keepIfGrounded(asString(j.summary), 'the summary');
   if (!commentary.summary) errors.push('summary missing');
 
   const stated = Number(j.overall_completion_rate);
@@ -255,10 +342,13 @@ export function validateAiJson(
       return;
     }
     const conf = asString(obs.confidence).toLowerCase();
+    const dept = asString(obs.department);
+    const observation = keepIfGrounded(asString(obs.observation), `an observation for ${dept}`);
+    const interpretation = keepIfGrounded(asString(obs.interpretation),
+      `an interpretation for ${dept}`);
+    if (!observation && !interpretation) return;
     commentary.departmentObservations.push({
-      department: asString(obs.department),
-      observation: asString(obs.observation),
-      interpretation: asString(obs.interpretation),
+      department: dept, observation, interpretation,
       confidence: (['high', 'medium', 'low'].includes(conf) ? conf : 'low') as 'high' | 'medium' | 'low'
     });
   });
@@ -266,10 +356,12 @@ export function validateAiJson(
   asArray(j.attention_items).slice(0, 10).forEach(a => {
     const it = a as Record<string, unknown>;
     if (!it || !asString(it.item)) return;
+    const item = keepIfGrounded(asString(it.item), 'an attention item');
+    if (!item) return;
     commentary.attentionItems.push({
-      item: asString(it.item),
-      whyItMatters: asString(it.why_it_matters),
-      supportingData: asString(it.supporting_data),
+      item,
+      whyItMatters: keepIfGrounded(asString(it.why_it_matters), 'an attention rationale'),
+      supportingData: keepIfGrounded(asString(it.supporting_data), 'attention supporting data'),
       suggestedAction: asString(it.suggested_action)
     });
   });
@@ -284,7 +376,9 @@ export function validateAiJson(
       return;
     }
     // Numbers ALWAYS come from the dataset, never from the model.
-    commentary.slowTasks.push({ ...src, comment: asString(it.comment) });
+    commentary.slowTasks.push({
+      ...src, comment: keepIfGrounded(asString(it.comment), 'a slow-task comment')
+    });
   });
 
   const repKey = new Map(
@@ -305,12 +399,14 @@ export function validateAiJson(
     commentary.repeatedTasks.push({
       employee: src.employee, task: src.task, occurrences: src.occurrences,
       distinctDates: src.distinctDates, classification: src.classification,
-      comment: asString(it.comment)
+      comment: keepIfGrounded(asString(it.comment), 'a repeated-task comment')
     });
   });
 
-  commentary.trends = asArray(j.trends).map(asString).filter(Boolean).slice(0, 10);
-  commentary.dataQuality = asArray(j.data_quality).map(asString).filter(Boolean).slice(0, 10);
+  commentary.trends = asArray(j.trends).map(asString)
+    .map(t => keepIfGrounded(t, 'a trend')).filter(Boolean).slice(0, 10);
+  commentary.dataQuality = asArray(j.data_quality).map(asString)
+    .map(t => keepIfGrounded(t, 'a data-quality note')).filter(Boolean).slice(0, 10);
 
   return { ok: errors.length === 0, errors, commentary };
 }

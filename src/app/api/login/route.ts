@@ -3,6 +3,7 @@ import {
   checkPassword, issueToken, LOCAL_USER_ID, passwordLoginEnabled,
   SESSION_COOKIE, sessionCookieOptions
 } from '@/lib/auth';
+import { LIMITS, rateLimit } from '@/lib/rate-limit';
 import { touchLocalUser } from '@/lib/users';
 
 export const runtime = 'nodejs';
@@ -13,6 +14,17 @@ export const dynamic = 'force-dynamic';
  * configured. "Continue with Google" is the primary route (/api/auth/google).
  */
 export async function POST(req: Request) {
+  // Keyed by source address, because an unauthenticated caller has no user id
+  // yet. A person typing a password cannot reach this; a script guessing one
+  // reaches it immediately.
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() || 'unknown';
+  const limit = rateLimit(`login:${ip}`, LIMITS.login.limit, LIMITS.login.windowMs);
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: `Too many sign-in attempts. Try again in ${limit.retryAfterSeconds}s.` },
+      { status: 429, headers: { 'retry-after': String(limit.retryAfterSeconds) } });
+  }
+
   if (!passwordLoginEnabled()) {
     return NextResponse.json(
       { error: 'Password sign-in is disabled. Use Continue with Google.' }, { status: 400 });

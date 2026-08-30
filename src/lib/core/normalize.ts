@@ -7,7 +7,7 @@
  * guesses a value it was not given.
  */
 import type {
-  Category, Department, Employee, EngineConfig, Field, Masters, TaskStatus
+  Category, Employee, EngineConfig, Field, Masters, TaskStatus
 } from './types';
 import { STATUSES } from './types';
 

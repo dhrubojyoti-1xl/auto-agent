@@ -12,10 +12,10 @@
  */
 import type {
   Cell, EngineConfig, Employee, Field, IngestResult, Masters, RejectedRow,
-  SourceDocument, Table, TaskRecord
+  SourceDocument, TaskRecord
 } from './types';
 import {
-  cleanWhitespace, decodeEntities, findDepartmentInText, departmentFromSender,
+  cleanWhitespace, findDepartmentInText, departmentFromSender,
   expectedDurationFor, keyify, lookupDepartment, normalizePriority, normalizeStatus,
   normalizeTask, parseDate, parseHours, parseTime, resolveCategory, resolveEmployee,
   shortHash

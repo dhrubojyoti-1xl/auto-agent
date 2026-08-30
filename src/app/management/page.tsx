@@ -20,13 +20,6 @@ const WINDOW: Record<Grain, number> = { daily: 30, weekly: 84, monthly: 365 };
 const PERIOD_NOUN: Record<Grain, string> = { daily: 'day', weekly: 'week', monthly: 'month' };
 const PERIOD_PLURAL: Record<Grain, string> = { daily: 'days', weekly: 'weeks', monthly: 'months' };
 
-function fmtPeriod(iso: string, grain: Grain) {
-  const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const [y, m, d] = iso.split('-').map(Number);
-  if (grain === 'monthly') return `${M[m - 1]} ${y}`;
-  if (grain === 'weekly') return `w/c ${d} ${M[m - 1]}`;
-  return `${d} ${M[m - 1]}`;
-}
 
 function Kpi({ label, value, note, tone }:
   { label: string; value: string | number; note?: string; tone?: 'ok'|'warn'|'bad' }) {
@@ -80,7 +73,6 @@ export default async function ManagementPage({
     total: a.total + p.total, completed: a.completed + p.completed,
     backlog: a.backlog + p.backlog
   }), { total: 0, completed: 0, backlog: 0 });
-  const overallRate = totals.total ? Math.round((totals.completed / totals.total) * 1000) / 10 : 0;
   const ppChange = latest && previous
     ? Math.round((latest.completionRate - previous.completionRate) * 10) / 10 : null;
 

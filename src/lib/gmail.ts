@@ -7,6 +7,29 @@
  */
 const API = 'https://gmail.googleapis.com/gmail/v1/users/me';
 
+/**
+ * Every call is bounded in time and retried a fixed number of times.
+ *
+ * Without a timeout a single stalled request holds the whole sync until the
+ * serverless function is killed, which leaves the run marked RUNNING for ever
+ * and gives the manager no idea what happened. Without a retry, one 503 from
+ * Gmail — which happens — throws away an entire scheduled sync until tomorrow.
+ *
+ * Only transient conditions are retried: network failures, 429, and 5xx. A 401
+ * or 403 means the grant is gone or the scope is wrong, and repeating the call
+ * cannot change that. The backoff is short and the attempt count small, because
+ * the whole sync has to finish inside a serverless invocation.
+ */
+export const REQUEST_TIMEOUT_MS = Number(process.env.GMAIL_TIMEOUT_MS || 20_000);
+export const MAX_ATTEMPTS = Number(process.env.GMAIL_MAX_ATTEMPTS || 3);
+const BACKOFF_MS = Number(process.env.GMAIL_BACKOFF_MS || 400);
+
+export function isTransient(status: number | undefined): boolean {
+  return status === 429 || (status !== undefined && status >= 500 && status < 600);
+}
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
 export interface GmailAttachment {
   filename: string;
   mimeType: string;
@@ -29,16 +52,41 @@ export interface GmailMessage {
 }
 
 async function api<T>(path: string, accessToken: string): Promise<T> {
-  const res = await fetch(`${API}${path}`, {
-    headers: { authorization: `Bearer ${accessToken}` }
-  });
-  if (!res.ok) {
-    const body = (await res.text()).slice(0, 300);
-    const err = new Error(`Gmail API ${res.status} on ${path}: ${body}`);
-    (err as Error & { status?: number }).status = res.status;
-    throw err;
+  let lastError: Error = new Error(`Gmail API never attempted ${path}`);
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      const res = await fetch(`${API}${path}`, {
+        headers: { authorization: `Bearer ${accessToken}` },
+        signal: controller.signal
+      });
+      if (res.ok) return await res.json() as T;
+
+      const body = (await res.text()).slice(0, 300);
+      const err = new Error(`Gmail API ${res.status} on ${path}: ${body}`);
+      (err as Error & { status?: number }).status = res.status;
+      if (!isTransient(res.status) || attempt === MAX_ATTEMPTS) throw err;
+      lastError = err;
+    } catch (e) {
+      const status = (e as Error & { status?: number }).status;
+      // A thrown response error that is not transient has already been decided
+      // above; anything else here is a network failure or the timeout firing.
+      if (status !== undefined && !isTransient(status)) throw e;
+      if (attempt === MAX_ATTEMPTS) {
+        throw (e as Error).name === 'AbortError'
+          ? Object.assign(new Error(
+              `Gmail API timed out after ${REQUEST_TIMEOUT_MS}ms on ${path}`), { status: 504 })
+          : e;
+      }
+      lastError = e as Error;
+    } finally {
+      clearTimeout(timer);
+    }
+    await sleep(BACKOFF_MS * attempt);
   }
-  return res.json() as Promise<T>;
+  throw lastError;
 }
 
 export async function listMessageIds(

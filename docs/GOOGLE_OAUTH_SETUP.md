@@ -128,13 +128,17 @@ That is the whole end-user experience.
 
 ---
 
-## The hourly loop
+## The unattended loop
 
 `vercel.json` registers a cron job:
 
 ```json
-{ "crons": [{ "path": "/api/cron/sync", "schedule": "0 * * * *" }] }
+{ "crons": [{ "path": "/api/cron/sync", "schedule": "0 3 * * *" }] }
 ```
+
+Once a day at 03:00, which is the most a Vercel Hobby plan permits — it refuses
+a tighter schedule at deploy time. `vercel.pro.json.example` holds the hourly
+version for a Pro plan.
 
 Vercel calls it with `Authorization: Bearer $CRON_SECRET`; without a matching
 secret the endpoint returns 401, so it cannot be driven from outside.

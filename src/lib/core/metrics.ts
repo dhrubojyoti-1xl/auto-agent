@@ -202,7 +202,11 @@ export function buildDepartmentSummary(
 }
 
 export function buildEmployeeSummary(
-  tasks: TaskRecord[], analysis: AnalysisResult, cfg: EngineConfig
+  tasks: TaskRecord[], analysis: AnalysisResult,
+  // Employees are grouped by the name on the row, so no configuration is
+  // consulted. The parameter stays for symmetry with the department and period
+  // builders, which do use it.
+  _cfg?: EngineConfig
 ): EmployeeRow[] {
   const anchor = anchorDate(tasks);
   if (!anchor) return [];

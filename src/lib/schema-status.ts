@@ -16,7 +16,8 @@ const REQUIRED_COLUMNS: [table: string, column: string][] = [
   ['tasks', 'slow_reason'],
   ['documents', 'owner_user_id'],
   ['gmail_accounts', 'refresh_token_enc'],
-  ['sync_runs', 'rows_duplicate']
+  ['sync_runs', 'rows_duplicate'],
+  ['ai_reports', 'dataset_fingerprint']
 ];
 
 const REQUIRED_VIEWS = [

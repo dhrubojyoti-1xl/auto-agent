@@ -5,6 +5,7 @@ import { listGmailAccounts, listSyncRuns } from '@/lib/accounts';
 import { getKpis, getRejections } from '@/lib/queries';
 import { googleConfigured } from '@/lib/google-oauth';
 import { query } from '@/lib/db';
+import { safeErrorMessage } from '@/lib/safe-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,7 +27,7 @@ export default async function SyncHealthPage() {
         `select processing_status as status, count(*)::int as n from documents
          where owner_user_id = $1 group by 1 order by 1`, [uid])
     ]);
-  } catch (e) { dbError = (e as Error).message; }
+  } catch (e) { dbError = safeErrorMessage(e); }
 
   const totals = runs.reduce((a, r) => ({
     scanned: a.scanned + r.messagesScanned, found: a.found + r.reportsFound,
@@ -74,8 +75,30 @@ export default async function SyncHealthPage() {
               <Row label="Sync status" value={lastRun ? lastRun.status : '—'} />
               <Row label="Automatic schedule" value="daily"
                    note="— plus Sync now; hourly needs a Vercel Pro plan" />
+              <Row label="AI commentary"
+                   value={process.env.ANTHROPIC_API_KEY ? 'configured' : 'not configured'}
+                   note={process.env.ANTHROPIC_API_KEY
+                     ? '— reused when the figures have not changed'
+                     : '— the dashboard and reports work without it'} />
+              <Row label="Running build"
+                   value={(process.env.VERCEL_GIT_COMMIT_SHA || 'local').slice(0, 7)}
+                   note={process.env.VERCEL_REGION ? `— ${process.env.VERCEL_REGION}` : '— local'} />
             </tbody>
           </table>
+        </div>
+
+        <h2>Keep a copy</h2>
+        <div className="card">
+          <p className="small muted" style={{ marginTop: 0 }}>
+            Supabase&rsquo;s free plan has no point-in-time recovery, so the safety net is a
+            file you hold. The export contains your tasks, rejected rows, import history and
+            master data &mdash; everything that cannot simply be re-read from Gmail. It never
+            contains your Gmail token.
+          </p>
+          <div className="row">
+            <a className="btn secondary" href="/api/export?format=json">Download full export (JSON)</a>
+            <a className="btn secondary" href="/api/export?format=csv">Download tasks (CSV)</a>
+          </div>
         </div>
 
         <h2>Throughput (last {runs.length} run{runs.length === 1 ? '' : 's'})</h2>

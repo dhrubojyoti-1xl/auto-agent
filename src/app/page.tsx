@@ -3,6 +3,7 @@ import Nav from './nav';
 import { getSession } from '@/lib/auth';
 import { listGmailAccounts } from '@/lib/accounts';
 import { getDailyTrend, getDepartments, getDocuments, getEmployees, getKpis } from '@/lib/queries';
+import { safeErrorMessage } from '@/lib/safe-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,7 +56,7 @@ export default async function OverviewPage() {
         <main className="shell">
           <h1>Overview</h1>
           <div className="banner bad">
-            <strong>Database unavailable.</strong> {(e as Error).message}
+            <strong>Database unavailable.</strong> {safeErrorMessage(e)}
             <div className="small muted" style={{ marginTop: '.4rem' }}>
               Check <code>DATABASE_URL</code>, then apply <code>supabase/schema.sql</code>.
             </div>

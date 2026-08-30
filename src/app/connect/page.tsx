@@ -7,6 +7,7 @@ import { googleConfigured } from '@/lib/google-oauth';
 import ConnectControls from './controls';
 import SchemaControls from './schema-controls';
 import { getSchemaStatus } from '@/lib/schema-status';
+import { safeErrorMessage } from '@/lib/safe-error';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,7 +39,7 @@ export default async function ConnectPage({
       getSchemaStatus()
     ]);
   } catch (e) {
-    dbError = (e as Error).message;
+    dbError = safeErrorMessage(e);
   }
 
   const errKey = params.error || '';

@@ -114,12 +114,20 @@ export async function syncAccount(account: GmailAccount, trigger: string): Promi
       summary.messagesScanned++;
       try {
         const msg = await getMessage(accessToken, id);
-        const documents = await documentsFromMessage(msg, accessToken, masters, cfg);
+        const skipped: SkippedAttachment[] = [];
+        const documents = await documentsFromMessage(msg, accessToken, masters, cfg, skipped);
+
+        if (skipped.length) {
+          await recordSkippedAttachments(owner, msg, skipped);
+          summary.rowsRejected += skipped.length;
+        }
 
         if (!documents.length) {
           // Not a report. Recorded so it is never examined again.
           await recordNonReport(account.id, owner, msg,
-            'No report table in the body or attachments');
+            skipped.length
+              ? `No usable report: ${skipped.map(s => s.detail).join('; ')}`.slice(0, 500)
+              : 'No report table in the body or attachments');
           continue;
         }
 
@@ -180,10 +188,17 @@ export async function syncAccount(account: GmailAccount, trigger: string): Promi
  * inline table in the same email do not collide, and so the source of every
  * row stays traceable.
  */
+export interface SkippedAttachment {
+  filename: string;
+  reason: string;
+  detail: string;
+}
+
 async function documentsFromMessage(
   msg: GmailMessage, accessToken: string,
   masters: Awaited<ReturnType<typeof loadMasters>>,
-  cfg: ReturnType<typeof engineConfig>
+  cfg: ReturnType<typeof engineConfig>,
+  skipped: SkippedAttachment[]
 ): Promise<SourceDocument[]> {
   const docs: SourceDocument[] = [];
 
@@ -197,14 +212,42 @@ async function documentsFromMessage(
   }
 
   for (const att of msg.attachments) {
+    // A spreadsheet that never becomes data has to say so somewhere. Skipping
+    // quietly is how a department mails its report every day, sees it arrive
+    // in the inbox, and finds nothing in the dashboard and no explanation
+    // anywhere. Only genuinely unrelated files (an image, a PDF signature) are
+    // passed over in silence.
     if (!isParsableAttachment(att.filename, att.mimeType)) continue;
-    if (att.size > MAX_ATTACHMENT_BYTES) continue;
+
+    if (att.size > MAX_ATTACHMENT_BYTES) {
+      skipped.push({
+        filename: att.filename, reason: 'ATTACHMENT_TOO_LARGE',
+        detail: `${att.filename} is ${Math.round(att.size / 1024)}KB, over the ` +
+                `${Math.round(MAX_ATTACHMENT_BYTES / 1024)}KB limit. Send a smaller file, ` +
+                `or split the report.`
+      });
+      continue;
+    }
+
     try {
       const buf = await getAttachment(accessToken, msg.id, att.attachmentId);
       const tables = await attachmentToTables(att.filename, att.mimeType, buf);
-      if (!tables.length) continue;
+      if (!tables.length) {
+        skipped.push({
+          filename: att.filename, reason: 'ATTACHMENT_UNREADABLE',
+          detail: `${att.filename} could not be read as a spreadsheet or delimited file. ` +
+                  `It may be corrupted, password-protected, or an old .xls workbook.`
+        });
+        continue;
+      }
       const signal = detectInTables(tables, masters, cfg);
-      if (!signal.isReport) continue;
+      if (!signal.isReport) {
+        skipped.push({
+          filename: att.filename, reason: 'ATTACHMENT_NOT_A_REPORT',
+          detail: `${att.filename}: ${signal.reason}`
+        });
+        continue;
+      }
       docs.push({
         documentId: `gmail:${msg.id}:${att.filename}`,
         subject: `${msg.subject} [${att.filename}]`,
@@ -212,11 +255,40 @@ async function documentsFromMessage(
         tables, attachmentName: att.filename
       });
     } catch (e) {
+      skipped.push({
+        filename: att.filename, reason: 'ATTACHMENT_FAILED',
+        detail: `${att.filename}: ${(e as Error).message}`.slice(0, 300)
+      });
       await logEvent('WARN', 'Sync', 'attachment', 'WARN',
         `${att.filename}: ${(e as Error).message}`, msg.id);
     }
   }
   return docs;
+}
+
+/**
+ * An attachment that could not become data is a data-quality event, not a log
+ * line. It appears on the Data quality page beside rejected rows, with the
+ * filename and a reason the sender can act on.
+ */
+async function recordSkippedAttachments(
+  ownerUserId: number, msg: GmailMessage, skipped: SkippedAttachment[]
+): Promise<void> {
+  for (let i = 0; i < skipped.length; i++) {
+    const s = skipped[i];
+    await query(
+      `insert into data_quality
+         (report_id, document_id, table_index, row_index, rejection_reason,
+          rejection_detail, raw_row, claimed_date, owner_user_id)
+       values ($1,$2,$3,$4,$5,$6,$7,null,$8)
+       on conflict (owner_user_id, document_id, table_index, row_index, rejection_reason)
+       do nothing`,
+      [`GM-${msg.id}`, `gmail:${msg.id}:${s.filename}`, 0, i, s.reason,
+       s.detail.slice(0, 500),
+       JSON.stringify({ attachment: s.filename, subject: msg.subject, from: msg.from }),
+       ownerUserId]
+    );
+  }
 }
 
 async function loadSeenMessageIds(ownerUserId: number): Promise<Set<string>> {

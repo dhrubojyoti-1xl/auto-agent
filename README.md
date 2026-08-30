@@ -164,8 +164,11 @@ See [docs/WEB_APP.md](docs/WEB_APP.md) and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.
 
 ```bash
 npm test          # 86 Apps Script checks, no Google account needed
-npm run export    # regenerate sample-data/ and test-emails/ from the code
+npm run export-fixtures   # regenerate sample-data/ and test-emails/ from the code
 ```
+
+Running it day to day: **[docs/OPERATIONS.md](docs/OPERATIONS.md)** — schedules, limits,
+backup and recovery, and where to look when something is wrong.
 
 To put it in Google (about 30 minutes): follow **[docs/SETUP.md](docs/SETUP.md)**,
 then **[docs/REAL_GMAIL_SETUP.md](docs/REAL_GMAIL_SETUP.md)**.

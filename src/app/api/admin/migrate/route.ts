@@ -4,6 +4,7 @@ import { join } from 'path';
 import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { seedDatabase } from '@/lib/seed-db';
+import { safeErrorMessage } from '@/lib/safe-error';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -52,6 +53,6 @@ export async function POST() {
     });
   } catch (e) {
     return NextResponse.json(
-      { error: (e as Error).message.slice(0, 400), applied }, { status: 500 });
+      { error: safeErrorMessage(e, 400), applied }, { status: 500 });
   }
 }

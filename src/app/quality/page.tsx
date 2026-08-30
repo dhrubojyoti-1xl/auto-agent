@@ -19,8 +19,9 @@ export default async function QualityPage() {
       <main className="shell">
         <h1>Data quality</h1>
         <p className="sub">
-          Every row that did not become a task is here, with its original values and an
-          actionable reason. Nothing is ever silently dropped.
+          Every row &mdash; and every attachment &mdash; that did not become a task is here,
+          with its original values and an actionable reason. Nothing is silently dropped: a
+          spreadsheet that was too large, unreadable or not a report says so by name.
         </p>
 
         {Object.keys(byReason).length > 0 && (
@@ -43,7 +44,7 @@ export default async function QualityPage() {
               <thead>
                 <tr>
                   <th>Logged</th><th>Reason</th><th>Why, and how to fix it</th>
-                  <th>Date</th><th>Employee</th><th>Task</th><th>Status</th>
+                  <th>Date</th><th>Employee</th><th>Task or file</th><th>Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -54,7 +55,9 @@ export default async function QualityPage() {
                     <td className="small">{r.detail}</td>
                     <td className="small">{r.raw.date || '—'}</td>
                     <td className="small">{r.raw.employee || '—'}</td>
-                    <td className="small">{r.raw.task || '—'}</td>
+                    {/* Whole attachments are rejected too — an unreadable
+                        workbook has no task or employee, only a filename. */}
+                    <td className="small">{r.raw.task || r.raw.attachment || '—'}</td>
                     <td className="small">{r.raw.status || '—'}</td>
                   </tr>
                 ))}

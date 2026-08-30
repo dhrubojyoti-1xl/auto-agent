@@ -7,7 +7,7 @@ Manager
   → signs in
   → clicks "Connect Gmail" once
   → Google consent (read-only)
-  ────────────────────────────────── everything below is automatic, hourly
+  ──────────────────────────── everything below is automatic, once a day
   → the assistant reads their inbox
   → decides which messages are reports, by content
   → parses email bodies AND xlsx / csv attachments
@@ -254,9 +254,15 @@ yourself changes nothing.
 
 ### The unattended loop
 
-`vercel.json` registers `GET /api/cron/sync` hourly, authorised with
+`vercel.json` registers `GET /api/cron/sync` at 03:00 daily, authorised with
 `CRON_SECRET`. It syncs every connected inbox, rebuilds the analysis, and
 regenerates the management summary **only when something changed**.
+
+Daily is what a Vercel Hobby plan allows — it rejects a more frequent schedule
+at deploy time. **Sync now** on the Inbox page reads the mailbox immediately at
+any point in between, so nothing is ever more than one click away from current.
+On a Pro plan, copy `vercel.pro.json.example` over `vercel.json` for hourly;
+no code changes.
 
 ### When a grant is revoked
 

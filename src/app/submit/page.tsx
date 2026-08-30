@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useState } from 'react';
 import Nav from '../nav';
 import type { IngestResult } from '@/lib/core/types';
@@ -69,7 +70,7 @@ export default function SubmitPage() {
             <strong>Imported.</strong> {committed.rowsWritten} row(s) written,
             {' '}{committed.skippedIdempotent} already present,
             {' '}{committed.rejected.length} rejected.
-            {' '}<a href="/">View the dashboard</a>
+            {' '}<Link href="/">View the dashboard</Link>
             {committed.rowsWritten === 0 && committed.skippedIdempotent > 0 && (
               <div className="small muted" style={{ marginTop: '.4rem' }}>
                 Every row was already in the database, so nothing was duplicated. Importing the
