@@ -99,8 +99,22 @@ describe('slow-task baselines learned from history', () => {
     expect(s.actualDuration).toBe(5);
     expect(s.expectedDuration).toBe(1);
     expect(s.baselineSource).toBe('task history');
-    expect(s.baselineSampleSize).toBe(5);
+    // Five observations exist, but the task being judged is not counted among
+    // the comparisons it is judged against.
+    expect(s.baselineSampleSize).toBe(4);
     expect(s.reason).toMatch(/median/);
+  });
+
+  it('does not let a slow run pad the baseline it is measured against', () => {
+    // Three normal runs and two identical slow ones. Counting a slow task's
+    // own duration would pull the median up towards it; excluding just that
+    // one instance leaves the other slow run in the sample, where it belongs.
+    const out = analyzeSlowTasks(history([1, 1, 1, 6, 6]), CFG);
+    expect(out.slowTasks.length).toBe(2);
+    for (const s of out.slowTasks) {
+      expect(s.expectedDuration).toBe(1);
+      expect(s.baselineSampleSize).toBe(4);
+    }
   });
 
   it('uses a median, so one outlier cannot redefine normal', () => {

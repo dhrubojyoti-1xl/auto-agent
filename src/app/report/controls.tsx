@@ -8,9 +8,10 @@ export default function ReportControls({ aiConfigured }: { aiConfigured: boolean
   const [useAi, setUseAi] = useState(aiConfigured);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
+  const [done, setDone] = useState('');
 
   async function post(path: string, body: unknown, label: string) {
-    setBusy(label); setError('');
+    setBusy(label); setError(''); setDone('');
     try {
       const res = await fetch(path, {
         method: 'POST', headers: { 'content-type': 'application/json' },
@@ -18,7 +19,15 @@ export default function ReportControls({ aiConfigured }: { aiConfigured: boolean
       });
       const json = await res.json();
       if (!res.ok) setError(json.error || 'Request failed');
-      else router.refresh();
+      else {
+        // Rebuilding changes rows on other pages, not this one, so without a
+        // line of feedback the button looks like it did nothing at all.
+        if (label === 'rebuild') {
+          setDone(`Re-analysed ${json.tasks} task(s): ${json.repeatGroups} repeat ` +
+                  `group(s), ${json.slowTasks} slow task(s).`);
+        }
+        router.refresh();
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally { setBusy(''); }
@@ -48,6 +57,7 @@ export default function ReportControls({ aiConfigured }: { aiConfigured: boolean
         </button>
       </div>
       {error && <div className="banner bad" style={{ marginBottom: 0 }}>{error}</div>}
+      {done && <div className="banner ok" style={{ marginBottom: 0 }}>{done}</div>}
     </div>
   );
 }

@@ -281,9 +281,15 @@ export function analyzeSlowTasks(tasks: TaskRecord[], cfg: EngineConfig): {
         ['department history', baselines.byDepartment.get(t.department)]
       ];
       for (const [source, values] of candidates) {
-        // Exclude this task's own duration, or it partly defines its own
-        // baseline and a single slow run looks normal.
-        const others = (values || []).filter((_, i) => true);
+        // Drop one instance of this task's own duration, or it partly defines
+        // the baseline it is judged against and a single slow run looks
+        // normal. With a large sample this changes little; with a sample of
+        // three it is the difference between catching an outlier and hiding
+        // it. Only one instance goes, so genuine repeats of the same duration
+        // still count.
+        const others = [...(values || [])];
+        const self = others.indexOf(act);
+        if (self !== -1) others.splice(self, 1);
         if (others.length >= MIN_BASELINE_SAMPLE) {
           exp = median(others);
           baselineSource = source;

@@ -53,14 +53,25 @@ export default async function ManagementPage({
   const from = sp.from || undefined;
   const to = sp.to || undefined;
 
-  const [series, depts, status, employees, options, slow, repeats] = await Promise.all([
-    getPeriodSeries(uid, grain, { department, employee, from, to, limit: WINDOW[grain] }),
-    getDepartmentBreakdown(uid, { from, to }),
-    getStatusDistribution(uid, { department, from, to }),
-    getEmployeeActivity(uid, { department, from, to, limit: 10 }),
+  // The trend is capped at WINDOW[grain] periods, so it covers a shorter span
+  // than "everything ever imported". Every other panel has to cover exactly the
+  // same span, or the page reports two different totals for the same thing —
+  // a header saying 219 tasks above a chart adding up to 303. The window is
+  // read back off the series rather than computed from today's date, because
+  // the series shows the last N periods *that have data*, which with sparse
+  // reporting reaches further back than N calendar periods.
+  const series = await getPeriodSeries(
+    uid, grain, { department, employee, from, to, limit: WINDOW[grain] });
+  const windowFrom = from || series[0]?.period;
+  const scope = { department, employee, from: windowFrom, to };
+
+  const [depts, status, employees, options, slow, repeats] = await Promise.all([
+    getDepartmentBreakdown(uid, { employee, from: windowFrom, to }),
+    getStatusDistribution(uid, scope),
+    getEmployeeActivity(uid, { ...scope, limit: 10 }),
     getFilterOptions(uid),
-    getSlowTaskChart(uid, 8),
-    getRepeatGroups(uid)
+    getSlowTaskChart(uid, { ...scope, limit: 8 }),
+    getRepeatGroups(uid, scope)
   ]);
 
   const latest = series[series.length - 1];

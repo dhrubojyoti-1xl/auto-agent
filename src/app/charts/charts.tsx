@@ -25,6 +25,15 @@ function niceMax(v: number): number {
   return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag;
 }
 
+/*
+ * Every <title> below is given ONE pre-joined string child, never a sequence
+ * of interpolations. React treats <title> as document metadata wherever it
+ * appears — including inside <svg>, where it is really a tooltip — and metadata
+ * titles accept a single string child only. Passing several children made the
+ * server render <title></title> while the browser filled it in, which broke
+ * hydration on every page with a chart and left the tooltips empty until React
+ * re-rendered the whole tree on the client.
+ */
 function shortDate(iso: string): string {
   const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const [, m, d] = iso.split('-').map(Number);
@@ -77,7 +86,8 @@ export function LineChart({
               {pts.map(p => (
                 <circle key={p.x} cx={xAt(p.x)} cy={yAt(p.y)} r="3"
                         fill={PALETTE[si % PALETTE.length]}>
-                  <title>{shortDate(p.x)}: {p.y}{suffix}{s.name !== 'value' ? ` (${s.name})` : ''}</title>
+                  <title>{`${shortDate(p.x)}: ${p.y}${suffix}` +
+                          (s.name !== 'value' ? ` (${s.name})` : '')}</title>
                 </circle>
               ))}
             </g>
@@ -138,7 +148,7 @@ export function BarChart({
                   return v.value > 0 ? (
                     <rect key={v.name} x={cx - barW / 2} y={y1} width={barW} height={Math.max(y0 - y1, 0)}
                           fill={PALETTE[idx % PALETTE.length]} rx="2">
-                      <title>{r.label} — {v.name}: {v.value}{suffix}</title>
+                      <title>{`${r.label} — ${v.name}: ${v.value}${suffix}`}</title>
                     </rect>
                   ) : null;
                 }
@@ -147,7 +157,7 @@ export function BarChart({
                   <rect key={v.name} x={x} y={yAt(v.value)} width={Math.max(barW - 3, 2)}
                         height={Math.max(yAt(0) - yAt(v.value), 0)}
                         fill={PALETTE[idx % PALETTE.length]} rx="2">
-                    <title>{r.label} — {v.name}: {v.value}{suffix}</title>
+                    <title>{`${r.label} — ${v.name}: ${v.value}${suffix}`}</title>
                   </rect>
                 );
               })}
@@ -201,7 +211,7 @@ export function DonutChart({
            aria-label="Status distribution">
         {arcs.map(a => (
           <path key={a.name} d={a.d} fill={a.colour}>
-            <title>{a.name}: {a.value} ({a.pct}%)</title>
+            <title>{`${a.name}: ${a.value} (${a.pct}%)`}</title>
           </path>
         ))}
         <text x={cx} y={cy - 2} textAnchor="middle" className="donut-total">{total}</text>

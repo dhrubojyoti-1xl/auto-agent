@@ -85,13 +85,24 @@ export async function getEmployees(ownerUserId: number) {
   }));
 }
 
-export async function getRepeatGroups(ownerUserId: number) {
+export async function getRepeatGroups(
+  ownerUserId: number,
+  opts: { department?: string; employee?: string; from?: string; to?: string } = {}
+) {
+  const params: unknown[] = [ownerUserId];
+  const where = ['owner_user_id = $1'];
+  if (opts.department) { params.push(opts.department); where.push(`department = $${params.length}`); }
+  if (opts.employee) { params.push(opts.employee); where.push(`employee = $${params.length}`); }
+  // A group belongs in the window if any of its occurrences does, so the
+  // group's span must overlap the window rather than sit inside it.
+  if (opts.from) { params.push(opts.from); where.push(`last_date >= $${params.length}`); }
+  if (opts.to) { params.push(opts.to); where.push(`first_date <= $${params.length}`); }
   const rows = await query<Record<string, string | number | string[]>>(
     `select employee, department, task, occurrence_count, distinct_dates,
             max_same_day_count, first_date, last_date, classification,
             classification_reason
-     from repeat_groups where owner_user_id = $1 order by occurrence_count desc`,
-    [ownerUserId]);
+     from repeat_groups where ${where.join(' and ')} order by occurrence_count desc`,
+    params);
   return rows.map(r => ({
     employee: String(r.employee), department: String(r.department ?? ''),
     task: String(r.task), occurrences: Number(r.occurrence_count),
@@ -225,10 +236,11 @@ export async function getPeriodSeries(
 
 /** Per-department totals for a window. */
 export async function getDepartmentBreakdown(
-  ownerUserId: number, opts: { from?: string; to?: string } = {}
+  ownerUserId: number, opts: { employee?: string; from?: string; to?: string } = {}
 ) {
   const params: unknown[] = [ownerUserId];
   const where = ['owner_user_id = $1'];
+  if (opts.employee) { params.push(opts.employee); where.push(`employee_name = $${params.length}`); }
   if (opts.from) { params.push(opts.from); where.push(`task_date >= $${params.length}`); }
   if (opts.to) { params.push(opts.to); where.push(`task_date <= $${params.length}`); }
   const rows = await query<Record<string, string | number>>(
@@ -255,11 +267,13 @@ export async function getDepartmentBreakdown(
 }
 
 export async function getStatusDistribution(
-  ownerUserId: number, opts: { department?: string; from?: string; to?: string } = {}
+  ownerUserId: number,
+  opts: { department?: string; employee?: string; from?: string; to?: string } = {}
 ) {
   const params: unknown[] = [ownerUserId];
   const where = ['owner_user_id = $1'];
   if (opts.department) { params.push(opts.department); where.push(`department = $${params.length}`); }
+  if (opts.employee) { params.push(opts.employee); where.push(`employee_name = $${params.length}`); }
   if (opts.from) { params.push(opts.from); where.push(`task_date >= $${params.length}`); }
   if (opts.to) { params.push(opts.to); where.push(`task_date <= $${params.length}`); }
   const rows = await query<Record<string, string | number>>(
@@ -269,11 +283,14 @@ export async function getStatusDistribution(
 }
 
 export async function getEmployeeActivity(
-  ownerUserId: number, opts: { department?: string; from?: string; to?: string; limit?: number } = {}
+  ownerUserId: number,
+  opts: { department?: string; employee?: string; from?: string; to?: string;
+          limit?: number } = {}
 ) {
   const params: unknown[] = [ownerUserId];
   const where = ['owner_user_id = $1'];
   if (opts.department) { params.push(opts.department); where.push(`department = $${params.length}`); }
+  if (opts.employee) { params.push(opts.employee); where.push(`employee_name = $${params.length}`); }
   if (opts.from) { params.push(opts.from); where.push(`task_date >= $${params.length}`); }
   if (opts.to) { params.push(opts.to); where.push(`task_date <= $${params.length}`); }
   params.push(opts.limit ?? 12);
@@ -315,10 +332,22 @@ export async function getFilterOptions(ownerUserId: number) {
 }
 
 /** Slow tasks and repeat groups, already scoped, for their charts. */
-export async function getSlowTaskChart(ownerUserId: number, limit = 10) {
+export async function getSlowTaskChart(
+  ownerUserId: number,
+  opts: { department?: string; employee?: string; from?: string; to?: string;
+          limit?: number } = {}
+) {
+  const params: unknown[] = [ownerUserId];
+  const where = ['owner_user_id = $1'];
+  if (opts.department) { params.push(opts.department); where.push(`department = $${params.length}`); }
+  if (opts.employee) { params.push(opts.employee); where.push(`employee = $${params.length}`); }
+  if (opts.from) { params.push(opts.from); where.push(`task_date >= $${params.length}`); }
+  if (opts.to) { params.push(opts.to); where.push(`task_date <= $${params.length}`); }
+  params.push(opts.limit ?? 10);
   const rows = await query<Record<string, string | number>>(
     `select task, employee, variance_hours, expected_duration, actual_duration
-     from slow_tasks where owner_user_id = $1 limit $2`, [ownerUserId, limit]);
+     from slow_tasks where ${where.join(' and ')}
+     order by variance_hours desc limit $${params.length}`, params);
   return rows.map(r => ({
     task: String(r.task), employee: String(r.employee),
     variance: Number(r.variance_hours), expected: Number(r.expected_duration),
