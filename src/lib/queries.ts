@@ -379,3 +379,32 @@ export async function getAutoCreatedEmployees(ownerUserId: number) {
     lastSeen: r.last_seen ? String(r.last_seen) : ''
   }));
 }
+
+/**
+ * Every message that did not become data, with the decision the assistant made
+ * about it.
+ *
+ * "0 reports found" is true and useless. This is the same fact told properly:
+ * which messages were looked at, what each was judged to be, and what the
+ * judgement rested on.
+ */
+export async function getMessageOutcomes(ownerUserId: number, limit = 50) {
+  const rows = await query<Record<string, string | number | null>>(
+    `select subject, sender, received_at, processing_status,
+            coalesce(classification, 'NON_REPORT') as classification,
+            evidence, rows_inserted, rows_rejected, attachment_name
+     from documents
+     where owner_user_id = $1
+       and coalesce(classification, 'NON_REPORT') <> 'DEPARTMENTAL_REPORT'
+     order by received_at desc nulls last, processed_at desc
+     limit $2`, [ownerUserId, limit]);
+  return rows.map(r => ({
+    subject: String(r.subject ?? '(no subject)'),
+    sender: String(r.sender ?? ''),
+    receivedAt: r.received_at ? String(r.received_at) : '',
+    classification: String(r.classification),
+    evidence: String(r.evidence ?? ''),
+    rejected: Number(r.rows_rejected ?? 0),
+    attachment: String(r.attachment_name ?? '')
+  }));
+}

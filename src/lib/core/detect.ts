@@ -27,7 +27,29 @@ import { extractPipeTables, extractTables, mapHeaderRow } from './html-table';
  *   1  body tables and parsable attachments
  *   2  Google Sheets links followed via their CSV export
  */
-export const DETECTOR_VERSION = 2;
+export const DETECTOR_VERSION = 3;
+
+/**
+ * What a message turned out to be.
+ *
+ * The distinction that matters is between NON_REPORT and REVIEW_REQUIRED. The
+ * first is a decision — this is a newsletter, we are done with it. The second
+ * is an admission — something here looks like a report and could not be read —
+ * and it has to reach a person, because nothing else will resolve it.
+ */
+export type MessageClassification =
+  | 'DEPARTMENTAL_REPORT'
+  | 'POSSIBLE_REPORT'
+  | 'REVIEW_REQUIRED'
+  | 'UNSUPPORTED_FORMAT'
+  | 'NON_REPORT';
+
+/** Confidence a caller can act on, derived from how the report was recognised. */
+export function confidenceFor(signal: Pick<DetectionSignal, 'confidence'>): number {
+  return signal.confidence === 'high' ? 0.95
+       : signal.confidence === 'medium' ? 0.7
+       : 0;
+}
 
 export interface DetectionSignal {
   isReport: boolean;

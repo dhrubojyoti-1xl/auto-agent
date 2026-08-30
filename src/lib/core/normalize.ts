@@ -6,6 +6,7 @@
  * instance numbers) but never merges two genuinely different tasks, and never
  * guesses a value it was not given.
  */
+import { guessField } from './semantic-headers';
 import type {
   Category, Employee, EngineConfig, Field, Masters, TaskStatus
 } from './types';
@@ -318,7 +319,12 @@ export function normalizeHeader(raw: unknown, masters: Masters): Field | null {
   const k2 = k.replace(/\s*\(.*?\)\s*/g, ' ').replace(/[*#:]/g, '').replace(/\s{2,}/g, ' ').trim();
   if (aliases[k2]) return aliases[k2];
   if (/^(s no|sr no|sl no|sno|srno|#)$/.test(k2)) return null;
-  return null;
+
+  // Nothing configured matches. Read the heading for what it is about rather
+  // than giving up: departments invent wordings faster than anyone maintains a
+  // list, and a dropped column is how a whole table stops looking like a
+  // report. Deliberately last, so a configured alias always wins.
+  return guessField(k2 || k);
 }
 
 export function normalizePriority(v: unknown): string {

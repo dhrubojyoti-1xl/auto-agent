@@ -29,6 +29,44 @@ export function isParsableAttachment(filename: string, mimeType = ''): boolean {
   return isSpreadsheetAttachment(filename, mimeType) || isTextTableAttachment(filename, mimeType);
 }
 
+/**
+ * Attachments that could plausibly BE the report but that this stack cannot
+ * read: a PDF export, or a screenshot of a table.
+ *
+ * They are named separately from parsable ones because the required outcome
+ * differs. A logo in a signature is noise and is passed over in silence. A PDF
+ * called "Daily Report.pdf" is the report, and passing over it in silence is
+ * how a department believes it has reported for a week and the dashboard shows
+ * nothing. These get an explicit, visible outcome instead.
+ */
+export function isUnreadableDocumentAttachment(filename: string, mimeType = ''): boolean {
+  const f = filename.toLowerCase();
+  const m = mimeType.toLowerCase();
+  if (f.endsWith('.pdf') || m.includes('pdf')) return true;
+  if (f.endsWith('.doc') || f.endsWith('.docx') || m.includes('wordprocessing')) return true;
+  if (f.endsWith('.xls') && !f.endsWith('.xlsx')) return true;   // old binary Excel
+  if (f.endsWith('.ods') || f.endsWith('.numbers')) return true;
+  return false;
+}
+
+/**
+ * An image that is plausibly a screenshot of a report rather than a signature
+ * logo or a tracking pixel. Size is the only signal available before
+ * downloading it, and it is a good one: nobody screenshots a table into 4KB.
+ */
+export function looksLikeReportImage(
+  filename: string, mimeType = '', sizeBytes = 0
+): boolean {
+  const f = filename.toLowerCase();
+  const m = mimeType.toLowerCase();
+  const isImage = m.startsWith('image/') ||
+    ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.heic'].some(e => f.endsWith(e));
+  if (!isImage) return false;
+  // Inline signature images and tracking pixels are small; a screenshot of a
+  // table is not.
+  return sizeBytes >= 40_000;
+}
+
 /* -------------------------------------------------------------------------- */
 /* CSV / TSV                                                                   */
 /* -------------------------------------------------------------------------- */

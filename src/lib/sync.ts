@@ -13,10 +13,14 @@
  * two syncs contributes nothing the second time.
  */
 import { analyze } from './core/analysis';
-import { attachmentToTables, isParsableAttachment } from './core/attachments';
 import {
-  buildGmailQuery, detectInBody, detectInTables, DETECTOR_VERSION
+  attachmentToTables, isParsableAttachment, isUnreadableDocumentAttachment,
+  looksLikeReportImage
+} from './core/attachments';
+import {
+  buildGmailQuery, confidenceFor, detectInBody, detectInTables, DETECTOR_VERSION
 } from './core/detect';
+import type { MessageClassification } from './core/detect';
 import { csvToTables } from './core/attachments';
 import { fetchSheetCsv, findSheetLinks } from './core/links';
 import { ingestDocument } from './core/ingest';
@@ -119,7 +123,9 @@ export async function syncAccount(account: GmailAccount, trigger: string): Promi
       try {
         const msg = await getMessage(accessToken, id);
         const skipped: SkippedAttachment[] = [];
-        const documents = await documentsFromMessage(msg, accessToken, masters, cfg, skipped);
+        const bodySignal = { reason: '', confidence: 0 };
+        const documents = await documentsFromMessage(
+          msg, accessToken, masters, cfg, skipped, bodySignal);
 
         if (skipped.length) {
           await recordSkippedAttachments(owner, msg, skipped);
@@ -127,11 +133,11 @@ export async function syncAccount(account: GmailAccount, trigger: string): Promi
         }
 
         if (!documents.length) {
-          // Not a report. Recorded so it is never examined again.
-          await recordNonReport(account.id, owner, msg,
-            skipped.length
-              ? `No usable report: ${skipped.map(s => s.detail).join('; ')}`.slice(0, 500)
-              : 'No report table in the body or attachments');
+          // Every message ends with a decision a person can read. "Nothing was
+          // found" and "something was found and could not be read" are
+          // different outcomes and must not look the same.
+          const { classification, evidence } = classifyUnprocessed(skipped, bodySignal);
+          await recordNonReport(account.id, owner, msg, evidence, classification);
           continue;
         }
 
@@ -204,11 +210,14 @@ async function documentsFromMessage(
   msg: GmailMessage, accessToken: string,
   masters: Awaited<ReturnType<typeof loadMasters>>,
   cfg: ReturnType<typeof engineConfig>,
-  skipped: SkippedAttachment[]
+  skipped: SkippedAttachment[],
+  bodySignal: { reason: string; confidence: number }
 ): Promise<SourceDocument[]> {
   const docs: SourceDocument[] = [];
 
   const body = detectInBody(msg.html, msg.text, masters, cfg);
+  bodySignal.reason = body.reason;
+  bodySignal.confidence = confidenceFor(body);
   if (body.isReport) {
     docs.push({
       documentId: `gmail:${msg.id}`,
@@ -218,12 +227,29 @@ async function documentsFromMessage(
   }
 
   for (const att of msg.attachments) {
-    // A spreadsheet that never becomes data has to say so somewhere. Skipping
-    // quietly is how a department mails its report every day, sees it arrive
-    // in the inbox, and finds nothing in the dashboard and no explanation
-    // anywhere. Only genuinely unrelated files (an image, a PDF signature) are
-    // passed over in silence.
-    if (!isParsableAttachment(att.filename, att.mimeType)) continue;
+    // A file that never becomes data has to say so somewhere. Skipping quietly
+    // is how a department mails its report every day, sees it arrive in the
+    // inbox, and finds nothing in the dashboard and no explanation anywhere.
+    if (!isParsableAttachment(att.filename, att.mimeType)) {
+      if (isUnreadableDocumentAttachment(att.filename, att.mimeType)) {
+        skipped.push({
+          filename: att.filename, reason: 'ATTACHMENT_FORMAT_UNSUPPORTED',
+          detail: `${att.filename} is a document format this system cannot read. ` +
+                  `Send the report as a spreadsheet (.xlsx or .csv), as a table in the ` +
+                  `email itself, or as a shared Google Sheet link.`
+        });
+      } else if (looksLikeReportImage(att.filename, att.mimeType, att.size)) {
+        skipped.push({
+          filename: att.filename, reason: 'IMAGE_REVIEW_REQUIRED',
+          detail: `${att.filename} may be a screenshot of a report. Images are not read ` +
+                  `automatically — the figures would have to be guessed from pixels. ` +
+                  `Send the underlying spreadsheet, or paste the table into the email.`
+        });
+      }
+      // Anything else — a logo, a signature image, a tracking pixel — is
+      // genuinely not a report and is passed over without comment.
+      continue;
+    }
 
     if (att.size > MAX_ATTACHMENT_BYTES) {
       skipped.push({
@@ -318,6 +344,40 @@ async function documentsFromMessage(
  * line. It appears on the Data quality page beside rejected rows, with the
  * filename and a reason the sender can act on.
  */
+/**
+ * Why a message produced nothing, in terms a manager can act on.
+ *
+ * The order is deliberate: anything needing a person outranks anything that is
+ * merely unsupported, and both outrank "there was nothing here". A message
+ * that carried a screenshot AND a newsletter table is a review case, not a
+ * newsletter.
+ */
+function classifyUnprocessed(
+  skipped: SkippedAttachment[], bodySignal: { reason: string; confidence: number }
+): { classification: MessageClassification; evidence: string } {
+  const reasons = skipped.map(s => s.reason);
+  const details = skipped.map(s => s.detail).join('; ').slice(0, 500);
+
+  if (reasons.includes('IMAGE_REVIEW_REQUIRED')) {
+    return { classification: 'REVIEW_REQUIRED', evidence: details };
+  }
+  if (reasons.some(r => r === 'SHEET_NOT_SHARED' || r === 'SHEET_FAILED')) {
+    return { classification: 'REVIEW_REQUIRED', evidence: details };
+  }
+  if (reasons.includes('ATTACHMENT_FORMAT_UNSUPPORTED')) {
+    return { classification: 'UNSUPPORTED_FORMAT', evidence: details };
+  }
+  if (reasons.some(r => r.startsWith('ATTACHMENT_') || r.startsWith('SHEET_'))) {
+    return { classification: 'REVIEW_REQUIRED', evidence: details };
+  }
+  // A table was found and its columns were not a report's. That is a decision,
+  // not a failure — an invoice reaches here, and so does a newsletter.
+  return {
+    classification: 'NON_REPORT',
+    evidence: bodySignal.reason || 'No table found in the message body'
+  };
+}
+
 async function recordSkippedAttachments(
   ownerUserId: number, msg: GmailMessage, skipped: SkippedAttachment[]
 ): Promise<void> {
@@ -357,37 +417,46 @@ async function loadSeenMessageIds(ownerUserId: number): Promise<Set<string>> {
 }
 
 async function recordNonReport(
-  accountId: number, ownerUserId: number, msg: GmailMessage, reason: string
+  accountId: number, ownerUserId: number, msg: GmailMessage, reason: string,
+  classification: MessageClassification = 'NON_REPORT'
 ): Promise<void> {
   await query(
     `insert into documents (report_id, document_id, source, subject, sender, sender_domain,
        received_at, processing_status, tables_found, rows_extracted, rows_inserted,
        rows_skipped_idempotent, rows_rejected, error_message, gmail_account_id,
-       gmail_message_id, owner_user_id, detector_version)
-     values ($1,$2,'email',$3,$4,$5,$6,'NO_DATA',0,0,0,0,0,$7,$8,$9,$10,$11)
+       gmail_message_id, owner_user_id, detector_version, classification, evidence)
+     values ($1,$2,'email',$3,$4,$5,$6,'NO_DATA',0,0,0,0,0,$7,$8,$9,$10,$11,$12,$13)
      on conflict (owner_user_id, report_id) do update set
        error_message = excluded.error_message,
        processed_at = now(),
-       detector_version = excluded.detector_version`,
+       detector_version = excluded.detector_version,
+       classification = excluded.classification,
+       evidence = excluded.evidence`,
     [`GM-${msg.id}`, `gmail:${msg.id}`, msg.subject.slice(0, 300), msg.from,
      senderDomain(msg.from), msg.date, reason, accountId, msg.id, ownerUserId,
-     DETECTOR_VERSION]
+     DETECTOR_VERSION, classification, reason.slice(0, 500)]
   );
 }
 
 async function upsertGmailDocument(
   accountId: number, ownerUserId: number, msg: GmailMessage, doc: SourceDocument,
   reportId: string, status: string, tablesFound: number, rowsExtracted: number,
-  rowsInserted: number, rowsSkipped: number, rowsRejected: number
+  rowsInserted: number, rowsSkipped: number, rowsRejected: number,
+  confidence = 0.9, evidence = ''
 ): Promise<void> {
   await query(
     `insert into documents (report_id, document_id, source, subject, sender, sender_domain,
        received_at, processing_status, tables_found, rows_extracted, rows_inserted,
        rows_skipped_idempotent, rows_rejected, gmail_account_id, gmail_message_id,
-       attachment_name, owner_user_id, processed_at)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, now())
+       attachment_name, owner_user_id, detector_version, classification, confidence,
+       evidence, processed_at)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
+             $21, now())
      on conflict (owner_user_id, report_id) do update set
        processing_status = excluded.processing_status,
+       classification = excluded.classification,
+       confidence = excluded.confidence,
+       detector_version = excluded.detector_version,
        tables_found = excluded.tables_found,
        rows_extracted = excluded.rows_extracted,
        rows_inserted = greatest(documents.rows_inserted, excluded.rows_inserted),
@@ -397,7 +466,14 @@ async function upsertGmailDocument(
     [reportId, doc.documentId, doc.attachmentName ? 'attachment' : 'email',
      doc.subject.slice(0, 300), msg.from, senderDomain(msg.from), msg.date, status,
      tablesFound, rowsExtracted, rowsInserted, rowsSkipped, rowsRejected,
-     accountId, msg.id, doc.attachmentName || null, ownerUserId]
+     accountId, msg.id, doc.attachmentName || null, ownerUserId,
+     DETECTOR_VERSION,
+     // A report that produced rows is a report; one that produced none because
+     // every row failed validation is worth a person's attention.
+     rowsInserted > 0 ? 'DEPARTMENTAL_REPORT'
+       : rowsRejected > 0 ? 'REVIEW_REQUIRED' : 'POSSIBLE_REPORT',
+     confidence,
+     evidence.slice(0, 500)]
   );
 }
 

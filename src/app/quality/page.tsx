@@ -1,17 +1,31 @@
 import { redirect } from 'next/navigation';
 import Nav from '../nav';
 import { getSession } from '@/lib/auth';
-import { getAutoCreatedEmployees, getDocuments, getRejections } from '@/lib/queries';
+import {
+  getAutoCreatedEmployees, getDocuments, getMessageOutcomes, getRejections
+} from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
 
 export default async function QualityPage() {
   const session = await getSession();
   if (!session) redirect('/login');
-  const [rejections, documents, invented] = await Promise.all([
+  const [rejections, documents, invented, outcomes] = await Promise.all([
     getRejections(session.userId), getDocuments(session.userId, 30),
-    getAutoCreatedEmployees(session.userId)
+    getAutoCreatedEmployees(session.userId), getMessageOutcomes(session.userId, 50)
   ]);
+
+  // A decision the assistant made and finished with, versus something it could
+  // not finish. Only the second needs anyone's attention.
+  const NEEDS_A_PERSON = new Set(['REVIEW_REQUIRED', 'UNSUPPORTED_FORMAT', 'POSSIBLE_REPORT']);
+  const needsReview = outcomes.filter(o => NEEDS_A_PERSON.has(o.classification));
+  const settled = outcomes.filter(o => !NEEDS_A_PERSON.has(o.classification));
+  const LABEL: Record<string, string> = {
+    REVIEW_REQUIRED: 'Needs a look',
+    UNSUPPORTED_FORMAT: 'Format not readable',
+    POSSIBLE_REPORT: 'Looked like a report',
+    NON_REPORT: 'Not a report'
+  };
   const byReason = rejections.reduce<Record<string, number>>((acc, r) => {
     acc[r.reason] = (acc[r.reason] || 0) + 1; return acc;
   }, {});
@@ -67,6 +81,70 @@ export default async function QualityPage() {
               </tbody>
             </table>
           </div>
+        )}
+
+        <h2>Messages that need a person</h2>
+        {needsReview.length === 0 ? (
+          <div className="card small muted">
+            Nothing is waiting. Every message was either processed or decided against.
+          </div>
+        ) : (
+          <>
+            <p className="small muted">
+              Something in these messages looked like a report and could not be read.
+              Each says what happened and what would fix it.
+            </p>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Received</th><th>From</th><th>Subject</th>
+                    <th>Outcome</th><th>What happened, and what would fix it</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {needsReview.map((o, i) => (
+                    <tr key={i}>
+                      <td className="small">{o.receivedAt.slice(0, 10)}</td>
+                      <td className="small">{o.sender.slice(0, 40)}</td>
+                      <td className="small">{o.subject.slice(0, 60)}</td>
+                      <td><span className="pill warn">{LABEL[o.classification]}</span></td>
+                      <td className="small muted">{o.evidence}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        <h2>Messages decided against</h2>
+        {settled.length === 0 ? (
+          <div className="card small muted">No messages have been ruled out yet.</div>
+        ) : (
+          <>
+            <p className="small muted">
+              Read, judged not to be reports, and not looked at again. Shown so that a
+              report ruled out by mistake is findable rather than invisible.
+            </p>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Received</th><th>From</th><th>Subject</th><th>Why</th></tr>
+                </thead>
+                <tbody>
+                  {settled.slice(0, 25).map((o, i) => (
+                    <tr key={i}>
+                      <td className="small">{o.receivedAt.slice(0, 10)}</td>
+                      <td className="small">{o.sender.slice(0, 40)}</td>
+                      <td className="small">{o.subject.slice(0, 60)}</td>
+                      <td className="small muted">{o.evidence}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
 
         <h2>People the assistant assumed</h2>

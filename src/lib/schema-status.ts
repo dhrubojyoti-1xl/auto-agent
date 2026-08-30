@@ -19,7 +19,8 @@ const REQUIRED_COLUMNS: [table: string, column: string][] = [
   ['sync_runs', 'rows_duplicate'],
   ['ai_reports', 'dataset_fingerprint'],
   ['employees', 'auto_created'],
-  ['documents', 'detector_version']
+  ['documents', 'detector_version'],
+  ['documents', 'classification']
 ];
 
 const REQUIRED_VIEWS = [
