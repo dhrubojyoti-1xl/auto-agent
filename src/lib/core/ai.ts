@@ -314,3 +314,71 @@ export function validateAiJson(
 
   return { ok: errors.length === 0, errors, commentary };
 }
+
+
+/**
+ * JSON Schema for the commentary, passed as output_config.format so the API
+ * constrains the response rather than the prompt merely requesting it.
+ *
+ * This is belt AND braces: the schema guarantees well-formed JSON of the right
+ * shape, and validateAiJson() still checks every claim against the dataset.
+ * Shape validity is not truthfulness.
+ */
+export const AI_OUTPUT_FORMAT = {
+  type: 'json_schema' as const,
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['summary', 'overall_completion_rate', 'department_observations',
+               'attention_items', 'slow_tasks', 'repeated_tasks', 'trends', 'data_quality'],
+    properties: {
+      summary: { type: 'string' },
+      overall_completion_rate: { type: 'number' },
+      department_observations: {
+        type: 'array',
+        items: {
+          type: 'object', additionalProperties: false,
+          required: ['department', 'observation', 'interpretation', 'confidence'],
+          properties: {
+            department: { type: 'string' },
+            observation: { type: 'string' },
+            interpretation: { type: 'string' },
+            confidence: { type: 'string', enum: ['high', 'medium', 'low'] }
+          }
+        }
+      },
+      attention_items: {
+        type: 'array',
+        items: {
+          type: 'object', additionalProperties: false,
+          required: ['item', 'why_it_matters', 'supporting_data', 'suggested_action'],
+          properties: {
+            item: { type: 'string' }, why_it_matters: { type: 'string' },
+            supporting_data: { type: 'string' }, suggested_action: { type: 'string' }
+          }
+        }
+      },
+      slow_tasks: {
+        type: 'array',
+        items: {
+          type: 'object', additionalProperties: false,
+          required: ['task_id', 'comment'],
+          properties: { task_id: { type: 'string' }, comment: { type: 'string' } }
+        }
+      },
+      repeated_tasks: {
+        type: 'array',
+        items: {
+          type: 'object', additionalProperties: false,
+          required: ['employee', 'task', 'classification', 'comment'],
+          properties: {
+            employee: { type: 'string' }, task: { type: 'string' },
+            classification: { type: 'string' }, comment: { type: 'string' }
+          }
+        }
+      },
+      trends: { type: 'array', items: { type: 'string' } },
+      data_quality: { type: 'array', items: { type: 'string' } }
+    }
+  }
+};

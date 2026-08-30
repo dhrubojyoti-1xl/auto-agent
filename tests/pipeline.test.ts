@@ -157,9 +157,17 @@ d('pipeline against Postgres', () => {
   });
 
   it('dates survive the database round trip unshifted', async () => {
+    // Derive the expectation from the FIXTURE, not from today's clock: the
+    // demo email is generated with a date stamped at export time, so comparing
+    // against `new Date()` made this fail every time the day rolled over.
+    const html = readFileSync(join(ROOT, 'sample-data', 'real-demo-email.html'), 'utf8');
+    const stamped = html.match(/(\d{2}) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{4})/);
+    expect(stamped).toBeTruthy();
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const [, dd, mon, yyyy] = stamped as RegExpMatchArray;
+    const expected = `${yyyy}-${String(months.indexOf(mon) + 1).padStart(2, '0')}-${dd}`;
+
     const rows = await db.query(`select distinct task_date from tasks`);
-    const today = new Date();
-    const expected = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     expect(rows.map((r: { task_date: string }) => String(r.task_date))).toEqual([expected]);
   });
 });

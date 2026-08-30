@@ -9,7 +9,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { analyze } from './core/analysis';
 import {
-  AI_SYSTEM_PROMPT, buildAiDataset, buildAiUserPrompt, parseJsonLoose, validateAiJson
+  AI_OUTPUT_FORMAT, AI_SYSTEM_PROMPT, buildAiDataset, buildAiUserPrompt,
+  parseJsonLoose, validateAiJson
 } from './core/ai';
 import type { AiCommentary, AiDataset, ReportType } from './core/ai';
 import { buildDepartmentSummary, buildEmployeeSummary } from './core/metrics';
@@ -80,24 +81,41 @@ export async function generateReport(
 
   const key = process.env.ANTHROPIC_API_KEY;
   if (useAi && key) {
-    model = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
+    model = process.env.ANTHROPIC_MODEL || 'claude-opus-5';
     const client = new Anthropic({ apiKey: key });
     let lastError = '';
     for (let attempt = 0; attempt <= 1; attempt++) {
       try {
+        // Structured outputs, not prompt instructions. Two earlier attempts
+        // failed against this model family and both are documented API
+        // changes rather than bugs in the prompt:
+        //   temperature      -> removed, returns 400
+        //   assistant prefill -> removed, returns 400
+        // output_config.format constrains the response to the schema at the
+        // API level, so "Response was not valid JSON" cannot recur.
         const res = await client.messages.create({
           model,
-          max_tokens: 2000,
-          temperature: 0.2,
+          // Generous, because a truncated response is unparseable JSON. The
+          // earlier 2000 cap truncated mid-object.
+          max_tokens: 8000,
           system: AI_SYSTEM_PROMPT,
-          messages: [{ role: 'user', content: buildAiUserPrompt(dataset) }]
-        });
+          messages: [{ role: 'user', content: buildAiUserPrompt(dataset) }],
+          output_config: { format: AI_OUTPUT_FORMAT }
+        } as Parameters<typeof client.messages.create>[0]) as unknown as {
+          content: { type: string; text?: string }[];
+          stop_reason?: string;
+        };
+
         const text = res.content
           .filter(b => b.type === 'text')
-          .map(b => (b as { text: string }).text)
+          .map(b => b.text || '')
           .join('\n');
         const parsed = parseJsonLoose(text);
-        if (!parsed) { lastError = 'Response was not valid JSON'; continue; }
+        if (!parsed) {
+          lastError = `Response was not valid JSON (stop_reason=${res.stop_reason}, ` +
+                      `${text.length} chars)`;
+          continue;
+        }
         const v = validateAiJson(parsed, dataset);
         commentary = v.commentary;
         validationError = v.errors.join(' | ');
