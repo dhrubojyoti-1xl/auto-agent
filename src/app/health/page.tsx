@@ -6,7 +6,6 @@ import { listGmailAccounts, listSyncRuns } from '@/lib/accounts';
 import { getKpis, getRejections } from '@/lib/queries';
 import { getCoverage } from '@/lib/analytics';
 import { googleConfigured } from '@/lib/google-oauth';
-import { query } from '@/lib/db';
 import { safeErrorMessage } from '@/lib/safe-error';
 import { formatStamp } from '@/lib/format-date';
 
