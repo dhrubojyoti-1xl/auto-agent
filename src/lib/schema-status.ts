@@ -27,9 +27,12 @@ const REQUIRED_COLUMNS: [table: string, column: string][] = [
   ['documents', 'prefilter_score']
 ];
 
+// The last three are read by Looker Studio and anything else pointed at the
+// database directly, so a missing one breaks somebody's dashboard silently.
 const REQUIRED_VIEWS = [
   'slow_tasks', 'daily_summary', 'weekly_summary', 'monthly_summary',
-  'department_summary', 'employee_summary'
+  'department_summary', 'employee_summary',
+  'bi_tasks', 'bi_daily_by_department', 'bi_messages'
 ];
 
 export type SchemaStatus = {
