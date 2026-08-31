@@ -39,9 +39,15 @@ function connectionDetails(): {
     // the bare role name.
     const configured = decodeURIComponent(u.username || '');
     const ref = configured.includes('.') ? configured.split('.').slice(1).join('.') : '';
+    // The app's own port is not the one a charting tool wants. Supabase runs
+    // two poolers on the same host: 6543 is transaction mode, which suits a
+    // serverless app but rejects the prepared statements every JDBC client
+    // sends, so Looker Studio fails there in ways that read as random. 5432 is
+    // session mode, which is what a reporting tool needs.
+    const port = (u.port === '6543' || !u.port) ? '5432' : u.port;
     return {
       host: u.hostname,
-      port: u.port || '5432',
+      port,
       database: (u.pathname || '/postgres').replace(/^\//, '') || 'postgres',
       user: ref ? `${ROLE}.${ref}` : ROLE
     };
