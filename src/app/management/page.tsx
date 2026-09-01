@@ -10,7 +10,7 @@ import {
 import { compareCounts, compareRates, getAttention, getCoverage } from '@/lib/analytics';
 import type { Delta } from '@/lib/analytics';
 import { buildInsight } from '@/lib/insight';
-import Filters from './filters';
+import Filters from '../filters';
 
 export const dynamic = 'force-dynamic';
 

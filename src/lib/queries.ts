@@ -114,7 +114,8 @@ export async function getEmployees(ownerUserId: number) {
 
 export async function getRepeatGroups(
   ownerUserId: number,
-  opts: { department?: string; employee?: string; from?: string; to?: string } = {}
+  opts: { department?: string; employee?: string; from?: string; to?: string;
+          search?: string } = {}
 ) {
   const params: unknown[] = [ownerUserId];
   const where = ['owner_user_id = $1'];
@@ -124,6 +125,7 @@ export async function getRepeatGroups(
   // group's span must overlap the window rather than sit inside it.
   if (opts.from) { params.push(opts.from); where.push(`last_date >= $${params.length}`); }
   if (opts.to) { params.push(opts.to); where.push(`first_date <= $${params.length}`); }
+  if (opts.search) { params.push(`%${opts.search}%`); where.push(`task ilike $${params.length}`); }
   const rows = await query<Record<string, string | number | string[]>>(
     `select employee, department, task, occurrence_count, distinct_dates,
             max_same_day_count, first_date, last_date, classification,
@@ -139,12 +141,26 @@ export async function getRepeatGroups(
   }));
 }
 
-export async function getSlowTasks(ownerUserId: number) {
+export async function getSlowTasks(
+  ownerUserId: number,
+  opts: { department?: string; employee?: string; from?: string; to?: string;
+          search?: string } = {}
+) {
+  const params: unknown[] = [ownerUserId];
+  const where = ['owner_user_id = $1'];
+  if (opts.department) { params.push(opts.department); where.push(`department = $${params.length}`); }
+  if (opts.employee) { params.push(opts.employee); where.push(`employee = $${params.length}`); }
+  if (opts.from) { params.push(opts.from); where.push(`task_date >= $${params.length}`); }
+  if (opts.to) { params.push(opts.to); where.push(`task_date <= $${params.length}`); }
+  // Filtered in SQL, not hidden in the browser: a page that fetches everything
+  // and then shows a subset still sends every row to whoever asked, and its
+  // "3 slow tasks" would be counted from a list the reader cannot see.
+  if (opts.search) { params.push(`%${opts.search}%`); where.push(`task ilike $${params.length}`); }
   const rows = await query<Record<string, string | number>>(
     `select task_date, department, employee, task, task_category, task_status,
             expected_duration, actual_duration, variance_hours, variance_pct,
             duration_basis, baseline_source, baseline_sample, reason
-     from slow_tasks where owner_user_id = $1`, [ownerUserId]);
+     from slow_tasks where ${where.join(' and ')}`, params);
   return rows.map(r => ({
     date: String(r.task_date), department: String(r.department ?? ''),
     employee: String(r.employee), task: String(r.task),

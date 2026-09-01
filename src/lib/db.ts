@@ -484,41 +484,72 @@ export async function upsertRoster(
             aliases: string[]; role: string }[],
   departments: { id: string; name: string; manager: string; managerEmail: string }[]
 ): Promise<{ people: number; departments: number }> {
-  for (const d of departments) {
+  // Two statements, not two per row.
+  //
+  // The database is in Tokyo and the application runs in Virginia, so a round
+  // trip costs about 180ms. A loop issuing one insert per person turns a
+  // 200-person staff list into 200 round trips — over half a minute, well past
+  // the point where the request is killed and the manager is told, wrongly,
+  // that their roster is bad. unnest() turns the whole list into one trip.
+  if (departments.length) {
     await query(
       `insert into departments (department_id, department_name, name_aliases,
                                 manager, manager_email, sender_domains, active)
-       values ($1,$2,'{}',$3,$4,'{}',true)
+       select d.id, d.name, '{}', nullif(d.manager,''), nullif(d.manager_email,''), '{}', true
+         from jsonb_to_recordset($1::jsonb)
+                as d(id text, name text, manager text, manager_email text)
        -- On the NAME, not the id. A department the seed or an earlier import
        -- already created has its own id, and conflicting on the id would sail
-       -- past that row and then trip the unique constraint on the name — which
-       -- is how an import of a perfectly good staff list fails with a message
-       -- about a key nobody has ever seen.
+       -- past that row and then trip the unique constraint on the name.
        on conflict (department_name) do update set
          manager       = coalesce(nullif(excluded.manager, ''), departments.manager),
          manager_email = coalesce(nullif(excluded.manager_email, ''), departments.manager_email),
          active = true`,
-      [d.id, d.name, d.manager || null, d.managerEmail || null]
+      [JSON.stringify(departments.map(d => ({
+        id: d.id, name: d.name, manager: d.manager || '', manager_email: d.managerEmail || ''
+      })))]
     );
   }
-  for (const p of people) {
+
+  if (people.length) {
     await query(
       `insert into employees (employee_id, employee_name, name_aliases, department,
                               active, auto_created, role, email)
-       values ($1,$2,$3,$4,true,false,$5,$6)
-       on conflict (employee_id) do update set
-         employee_name = excluded.employee_name,
+       select p.id, p.name, coalesce(p.aliases, '{}'), nullif(p.department,''), true, false,
+              nullif(p.role,''), nullif(p.email,'')
+         -- jsonb rather than parallel arrays: unnest flattens a nested array,
+         -- so the per-person alias lists would arrive as one long list belonging
+         -- to nobody.
+         from jsonb_to_recordset($1::jsonb)
+                as p(id text, name text, aliases text[], department text,
+                     role text, email text)
+       -- On the NAME, not the id, and specifically on lower(employee_name),
+       -- which is the unique index that actually exists. Everyone in Harshal's
+       -- first roster was already in this table: the importer met them in a
+       -- report weeks ago and minted an id of its own. Conflicting on the id
+       -- would miss those rows entirely and then die on the name index, so
+       -- importing a roster for people the product already knew about — which
+       -- is every real first import — failed outright.
+       on conflict (lower(employee_name)) do update set
+         -- Aliases merge rather than replace: a name learned from an earlier
+         -- sheet is still true, and dropping it would quietly send that
+         -- person's rows back to Unassigned.
          name_aliases  = (
            select coalesce(array_agg(distinct a), '{}')
              from unnest(employees.name_aliases || excluded.name_aliases) as a
             where a is not null and a <> ''
          ),
          department   = excluded.department,
-         role         = coalesce(nullif(excluded.role, ''), employees.role),
-         email        = coalesce(nullif(excluded.email, ''), employees.email),
+         role         = coalesce(excluded.role, employees.role),
+         email        = coalesce(excluded.email, employees.email),
          active       = true,
+         -- Previously guessed at from a report, now stated by the organisation:
+         -- the purge in /api/admin/reset must stop treating them as disposable.
          auto_created = false`,
-      [p.id, p.name, p.aliases, p.department || null, p.role || null, p.email || null]
+      [JSON.stringify(people.map(p => ({
+        id: p.id, name: p.name, aliases: p.aliases || [],
+        department: p.department || '', role: p.role || '', email: p.email || ''
+      })))]
     );
   }
   return { people: people.length, departments: departments.length };

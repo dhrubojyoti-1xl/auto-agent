@@ -98,6 +98,16 @@ describe('reading a pasted roster', () => {
     expect(rosterEmployeeId('Rahul Koli')).not.toBe(rosterEmployeeId('Usman Khan'));
   });
 
+  it('gives a thousand different people a thousand different ids', () => {
+    // The first version folded a 32-bit hash into six base-36 characters and
+    // collided well inside one company. A collision does not look like an
+    // error: the second person overwrites the first on the way in, and someone
+    // is simply missing from their department for ever after.
+    const ids = new Set(
+      Array.from({ length: 1000 }, (_, i) => rosterEmployeeId(`Person Number${i}`)));
+    expect(ids.size).toBe(1000);
+  });
+
   it('survives an empty paste without throwing', () => {
     const r = parseRoster('');
     expect(r.people).toEqual([]);

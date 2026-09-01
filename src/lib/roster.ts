@@ -16,7 +16,7 @@
  * that exists to stop them reformatting spreadsheets would be absurd.
  */
 import { parseDelimited } from './core/attachments';
-import { cleanWhitespace, keyify, titleCase } from './core/normalize';
+import { cleanWhitespace, keyify, shortHash, titleCase } from './core/normalize';
 
 export interface RosterPerson {
   name: string;
@@ -260,20 +260,20 @@ export function parseRoster(content: string): RosterParse {
 /**
  * A stable id for a rostered person.
  *
- * Derived from the name so that re-importing an updated spreadsheet updates
- * the same people rather than creating a second copy of everyone — which is
- * what would happen with a random id, and it would happen quietly.
+ * Derived from the name so that re-importing an updated spreadsheet updates the
+ * same people rather than creating a second copy of everyone — which is what a
+ * random id would do, and it would do it quietly.
+ *
+ * It uses the same hash the rest of the pipeline uses, at the same width. The
+ * first version folded a 32-bit rolling hash into six base-36 characters, which
+ * collided inside a single company: two different people would arrive with the
+ * same id, and the second would silently overwrite the first on the way in.
+ * Nobody would see anything wrong; a person would simply be missing.
  */
 export function rosterEmployeeId(name: string): string {
-  const k = keyify(name);
-  let h = 0;
-  for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0;
-  return 'EMP-' + h.toString(36).toUpperCase().padStart(6, '0').slice(0, 6);
+  return 'EMP-' + shortHash(keyify(name), 12).toUpperCase();
 }
 
 export function rosterDepartmentId(name: string): string {
-  const k = keyify(name);
-  let h = 0;
-  for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0;
-  return 'DEP-' + h.toString(36).toUpperCase().padStart(6, '0').slice(0, 6);
+  return 'DEP-' + shortHash(keyify(name), 12).toUpperCase();
 }

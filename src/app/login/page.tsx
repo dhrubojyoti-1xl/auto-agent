@@ -25,7 +25,10 @@ export default async function LoginPage({
 
   return (
     <div className="center">
-      <div style={{ width: 400 }}>
+      {/* A fixed 400 is wider than a 375px phone, so the card and the Sign in
+          button ran off the right edge of the first screen anyone ever sees.
+          maxWidth keeps the desktop layout exactly as it was. */}
+      <div style={{ width: '100%', maxWidth: 400 }}>
         <div className="card">
           <h1 style={{ marginBottom: '.35rem' }}>Department Reporting System</h1>
           <p className="sub" style={{ marginBottom: '1.2rem' }}>

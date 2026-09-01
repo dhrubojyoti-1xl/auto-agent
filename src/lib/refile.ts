@@ -55,9 +55,20 @@ export async function refileByRoster(ownerUserId: number): Promise<RefileResult>
   // Name and every alias point at the same department, so a report that says
   // "Rahul K" is re-filed exactly like one that says "Rahul Koli".
   const deptOf = new Map<string, string>();
+  // And at the same PERSON. Before the roster existed the importer had no way
+  // to know the two were one man, so it created a record for each, and the
+  // dashboard listed him twice — under two departments, with his work split
+  // between them and neither total right. Now that the organisation has said
+  // which names are his, the rows can carry the name he is actually called.
+  const nameOf = new Map<string, string>();
   for (const e of roster) {
     deptOf.set(keyify(e.employee_name), e.department);
-    (e.name_aliases || []).forEach(a => { if (a) deptOf.set(keyify(a), e.department); });
+    nameOf.set(keyify(e.employee_name), e.employee_name);
+    (e.name_aliases || []).forEach(a => {
+      if (!a) return;
+      deptOf.set(keyify(a), e.department);
+      nameOf.set(keyify(a), e.employee_name);
+    });
   }
 
   const tasks = await query<TaskRow>(
@@ -70,10 +81,15 @@ export async function refileByRoster(ownerUserId: number): Promise<RefileResult>
              stillUnassigned: [] };
   }
 
-  // The department each row SHOULD have. Unrecognised people keep what they had.
+  // The department and the name each row SHOULD have. Unrecognised people keep
+  // exactly what they had — an unknown name is a gap in the roster, not a
+  // licence to rename somebody.
   const target = new Map<string, string>();
+  const targetName = new Map<string, string>();
   for (const t of tasks) {
-    target.set(t.task_id, deptOf.get(keyify(t.employee_name)) || (t.department || ''));
+    const k = keyify(t.employee_name);
+    target.set(t.task_id, deptOf.get(k) || (t.department || ''));
+    targetName.set(t.task_id, nameOf.get(k) || t.employee_name);
   }
 
   // Ordinals have to be reconstructed exactly as import assigns them, or the
@@ -88,7 +104,8 @@ export async function refileByRoster(ownerUserId: number): Promise<RefileResult>
   const ordinal = new Map<string, number>();
   const seen = new Map<string, number>();
   for (const t of tasks) {
-    const key = [t.source_document_id || '', t.task_date, keyify(t.employee_name),
+    const key = [t.source_document_id || '', t.task_date,
+                 keyify(targetName.get(t.task_id) || ''),
                  keyify(target.get(t.task_id) || ''),
                  t.task_normalized, t.task_status].join('|');
     const n = (seen.get(key) || 0) + 1;
@@ -97,28 +114,55 @@ export async function refileByRoster(ownerUserId: number): Promise<RefileResult>
   }
 
   const updates = tasks
-    .filter(t => (target.get(t.task_id) || '') !== (t.department || ''))
+    .filter(t => (target.get(t.task_id) || '') !== (t.department || '') ||
+                 targetName.get(t.task_id) !== t.employee_name)
     .map(t => ({
       taskId: t.task_id,
       from: t.department || 'Unassigned',
       to: target.get(t.task_id) as string,
+      employee: targetName.get(t.task_id) as string,
       fingerprint: taskFingerprint(
-        t.task_date, t.employee_name, target.get(t.task_id) as string,
+        t.task_date, targetName.get(t.task_id) as string, target.get(t.task_id) as string,
         t.task_normalized, t.task_status, ordinal.get(t.task_id) as number)
     }));
 
   if (updates.length) {
+    // Two statements for the whole job, not two per row. The database is in
+    // Tokyo and the application runs in Virginia: at ~180ms a round trip, a
+    // loop over 282 rows is 564 trips and about a minute and a half, so the
+    // request would be killed long before the manager saw anything.
     await withTransaction(async q => {
       // Phase one: park every moving row on a fingerprint nothing else can
       // hold, so the unique constraint cannot fire on an intermediate state.
-      for (const u of updates) {
-        await q(`update tasks set task_fingerprint = $2 where task_id = $1`,
-                [u.taskId, 'refiling:' + u.taskId]);
-      }
+      await q(
+        `update tasks set task_fingerprint = 'refiling:' || task_id
+          where task_id = any($1::text[])`,
+        [updates.map(u => u.taskId)]);
       // Phase two: the real values.
-      for (const u of updates) {
-        await q(`update tasks set department = $2, task_fingerprint = $3 where task_id = $1`,
-                [u.taskId, u.to, u.fingerprint]);
+      await q(
+        `update tasks t
+            set department = v.department, employee_name = v.employee,
+                task_fingerprint = v.fingerprint
+           from jsonb_to_recordset($1::jsonb)
+                  as v(task_id text, department text, employee text, fingerprint text)
+          where t.task_id = v.task_id`,
+        [JSON.stringify(updates.map(u => ({
+          task_id: u.taskId, department: u.to, employee: u.employee,
+          fingerprint: u.fingerprint
+        })))]);
+
+      // The record the importer invented for the alias has nothing left under
+      // it. Only ever one it invented: a person the organisation configured is
+      // never removed by a re-file, whatever their name looks like.
+      const merged = [...new Set(updates.map(u => u.employee))];
+      if (merged.length) {
+        await q(
+          `delete from employees e
+            where e.auto_created
+              and lower(e.employee_name) <> all($1::text[])
+              and not exists (select 1 from tasks t
+                               where t.employee_name = e.employee_name)`,
+          [merged.map(m => m.toLowerCase())]);
       }
     });
   }
@@ -132,11 +176,12 @@ export async function refileByRoster(ownerUserId: number): Promise<RefileResult>
     byMove.set(k, { from: u.from, to: u.to, tasks: (prior?.tasks || 0) + 1 });
   });
 
-  const withWork = new Set(tasks.map(t => keyify(t.employee_name)));
+  const withWork = new Set(tasks.map(t => keyify(targetName.get(t.task_id) || t.employee_name)));
   const stillUnassigned = new Map<string, number>();
   tasks.forEach(t => {
     if ((target.get(t.task_id) || '') === '') {
-      stillUnassigned.set(t.employee_name, (stillUnassigned.get(t.employee_name) || 0) + 1);
+      const n = targetName.get(t.task_id) || t.employee_name;
+      stillUnassigned.set(n, (stillUnassigned.get(n) || 0) + 1);
     }
   });
 

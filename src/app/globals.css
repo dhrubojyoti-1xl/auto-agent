@@ -108,7 +108,11 @@ pre.report {
 .row { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; }
 .muted { color: var(--muted); }
 .small { font-size: .82rem; }
-.center { min-height: 82vh; display: grid; place-items: center; }
+/* The horizontal padding matters on a phone: without it the sign-in card sits
+   flush against both edges of the screen, which reads as broken rather than
+   full-bleed. It changes nothing on a desktop, where the card is centred with
+   room to spare. */
+.center { min-height: 82vh; display: grid; place-items: center; padding: 0 1rem; }
 
 /* ---------------------------------------------------------------- charts -- */
 .chart-wrap { width: 100%; }

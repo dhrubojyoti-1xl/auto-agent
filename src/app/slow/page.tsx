@@ -1,14 +1,30 @@
 import { redirect } from 'next/navigation';
 import Nav from '../nav';
+import Filters from '../filters';
 import { getSession } from '@/lib/auth';
-import { getKpis, getSlowTasks } from '@/lib/queries';
+import { getFilterOptions, getKpis, getSlowTasks } from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
 
-export default async function SlowPage() {
+export default async function SlowPage(
+  { searchParams }: { searchParams: Promise<Record<string, string | undefined>> }
+) {
   const session = await getSession();
   if (!session) redirect('/login');
-  const [rows, kpis] = await Promise.all([getSlowTasks(session.userId), getKpis(session.userId)]);
+
+  const sp = await searchParams;
+  const department = sp.department && sp.department !== 'all' ? sp.department : undefined;
+  const employee = sp.employee && sp.employee !== 'all' ? sp.employee : undefined;
+  const from = sp.from || undefined;
+  const to = sp.to || undefined;
+  const search = sp.q || undefined;
+  const filtered = !!(department || employee || from || to || search);
+
+  const [rows, kpis, options] = await Promise.all([
+    getSlowTasks(session.userId, { department, employee, from, to, search }),
+    getKpis(session.userId),
+    getFilterOptions(session.userId)
+  ]);
   return (
     <>
       <Nav />
@@ -22,6 +38,12 @@ export default async function SlowPage() {
           before any median is trusted. The <strong>Baseline from</strong> column says which.
         </p>
 
+        <Filters basePath="/slow"
+                 departments={options.departments} employees={options.employees}
+                 department={department} employee={employee} from={from} to={to}
+                 search={search} minDate={options.minDate} maxDate={options.maxDate}
+                 showSearch />
+
         <div className="banner warn">
           <strong>{kpis.insufficientDuration} of {kpis.total} tasks cannot be measured at all</strong>
           {' '}— they carry no start/completion timestamps, so their duration is unknown. They are
@@ -30,7 +52,11 @@ export default async function SlowPage() {
         </div>
 
         {rows.length === 0 ? (
-          <div className="card">No task exceeded its expected duration threshold.</div>
+          <div className="card">
+            {filtered
+              ? 'No slow task matches these filters. Clear them to see everything.'
+              : 'No task exceeded its expected duration threshold.'}
+          </div>
         ) : (
           <div className="table-wrap">
             <table>

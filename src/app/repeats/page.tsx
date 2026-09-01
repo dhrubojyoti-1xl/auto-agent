@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation';
 import Nav from '../nav';
+import Filters from '../filters';
 import { getSession } from '@/lib/auth';
-import { getRepeatGroups } from '@/lib/queries';
+import { getFilterOptions, getRepeatGroups } from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,10 +13,25 @@ const PILL: Record<string, string> = {
   'Needs Review': 'bad'
 };
 
-export default async function RepeatsPage() {
+export default async function RepeatsPage(
+  { searchParams }: { searchParams: Promise<Record<string, string | undefined>> }
+) {
   const session = await getSession();
   if (!session) redirect('/login');
-  const groups = await getRepeatGroups(session.userId);
+
+  const sp = await searchParams;
+  const department = sp.department && sp.department !== 'all' ? sp.department : undefined;
+  const employee = sp.employee && sp.employee !== 'all' ? sp.employee : undefined;
+  const from = sp.from || undefined;
+  const to = sp.to || undefined;
+  const search = sp.q || undefined;
+  const scope = { department, employee, from, to, search };
+
+  const [groups, options] = await Promise.all([
+    getRepeatGroups(session.userId, scope),
+    getFilterOptions(session.userId)
+  ]);
+  const filtered = !!(department || employee || from || to || search);
   return (
     <>
       <Nav />
@@ -25,6 +41,11 @@ export default async function RepeatsPage() {
           Every row here was imported. Repetition is classified, never deleted and never
           treated as a fault by itself.
         </p>
+        <Filters basePath="/repeats"
+                 departments={options.departments} employees={options.employees}
+                 department={department} employee={employee} from={from} to={to}
+                 search={search} minDate={options.minDate} maxDate={options.maxDate}
+                 showSearch />
         <div className="banner">
           <strong>Recurring / Legitimate</strong> — a routine duty.{' '}
           <strong>Highly Repetitive</strong> — an automation candidate.{' '}
@@ -32,7 +53,11 @@ export default async function RepeatsPage() {
           <strong>Needs Review</strong> — several identical rows in one day; a human should confirm.
         </div>
         {groups.length === 0 ? (
-          <div className="card">No task has been reported more than once yet.</div>
+          <div className="card">
+            {filtered
+              ? 'No repeated work matches these filters. Clear them to see everything.'
+              : 'No task has been reported more than once yet.'}
+          </div>
         ) : (
           <div className="table-wrap">
             <table>
