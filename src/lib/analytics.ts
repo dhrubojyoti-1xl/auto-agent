@@ -206,8 +206,24 @@ export async function getAttention(ownerUserId: number): Promise<AttentionItem[]
        (select count(*)::int from repeat_groups where owner_user_id = $1
           and classification in ('Needs Review','Potential Duplication'))  as repeats,
        (select count(*)::int from tasks where owner_user_id = $1
-          and task_status = 'Ambiguous')                                   as ambiguous`,
+          and task_status = 'Ambiguous')                                   as ambiguous,
+       -- Rows whose status word the product did not recognise. It records them
+       -- as Pending rather than guessing, which is right — but it then said so
+       -- nowhere a manager looks, so a completion rate that was low ONLY
+       -- because a team writes "Done ✔" appeared to be a low completion rate.
+       (select count(*)::int from tasks where owner_user_id = $1
+          and data_quality_notes like '%Unrecognised status%')             as unread_status`,
     [ownerUserId]);
+
+  // The actual words, so the fix is a five-minute conversation rather than an
+  // investigation. Quoted inside the note by the importer, pulled back out here.
+  const unreadWords = num(quality?.unread_status) > 0
+    ? (await query<{ word: string }>(
+        `select distinct substring(data_quality_notes from 'Unrecognised status "([^"]*)"') as word
+           from tasks
+          where owner_user_id = $1 and data_quality_notes like '%Unrecognised status%'
+          limit 8`, [ownerUserId])).map(r => r.word).filter(Boolean)
+    : [];
 
   if (num(quality?.review_msgs) > 0) {
     items.push({
@@ -277,6 +293,21 @@ export async function getAttention(ownerUserId: number): Promise<AttentionItem[]
       detail: 'These reports carry no department column, and the sender address ' +
               'identifies none, so no department was guessed.',
       href: '/quality', action: 'Review attribution'
+    });
+  }
+  if (num(quality?.unread_status) > 0) {
+    items.push({
+      severity: 'high', count: num(quality.unread_status),
+      title: 'Statuses that could not be read',
+      detail:
+        (unreadWords.length
+          ? `These rows say ${unreadWords.map(w => `"${w}"`).join(', ')}, which do not ` +
+            'match any status the product knows. '
+          : 'These rows use status words the product does not recognise. ') +
+        'They are counted as reported work but not as completed, so the completion ' +
+        'rate is lower than the team would say it is. Ask them to use Completed, ' +
+        'In Progress, Pending, Blocked, Not Started or Cancelled.',
+      href: '/quality', action: 'See the rows'
     });
   }
   if (num(quality?.no_duration) > 0) {
