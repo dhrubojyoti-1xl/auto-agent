@@ -303,6 +303,16 @@ export async function getDepartmentBreakdown(
             count(distinct employee_name)::int as employees
      from tasks where ${where.join(' and ')}
      group by 1 order by total desc`, params);
+
+  // Who runs each department, from the roster. Fetched separately rather than
+  // joined: the aggregate above is the one query on this page whose shape has
+  // been stable for months, and rewriting its FROM clause to hang a lookup off
+  // it risks the totals to save a round trip that costs nothing.
+  const managers = new Map(
+    (await query<{ department_name: string; manager: string | null }>(
+      `select department_name, manager from departments where active`))
+      .map(d => [d.department_name.toLowerCase(), d.manager || ''])
+  );
   return rows.map(r => ({
     department: String(r.department), total: Number(r.total),
     completed: Number(r.completed), pending: Number(r.pending),
@@ -310,7 +320,8 @@ export async function getDepartmentBreakdown(
     completionRate: Number(r.completion_rate), slowTasks: Number(r.slow_tasks),
     repeatedTasks: Number(r.repeated_tasks),
     repeatGroups: Number(r.repeat_groups ?? 0),
-    repeatAttention: Number(r.repeat_attention ?? 0), employees: Number(r.employees)
+    repeatAttention: Number(r.repeat_attention ?? 0), employees: Number(r.employees),
+    manager: managers.get(String(r.department).toLowerCase()) || ''
   }));
 }
 

@@ -156,16 +156,28 @@ export default async function OverviewPage() {
           </div>
         </div>
 
-        {departments.length === 1 && departments[0].department === 'Unassigned' && (
-          <div className="banner warn">
-            <strong>No department was stated in these reports.</strong> The reports carry no
-            department column, and the sender&rsquo;s address does not identify one, so
-            everything sits under &ldquo;Unassigned&rdquo;. Add a Department column to the
-            report, or set the department on{' '}
-            <a href="/quality">the people listed on Data quality</a>, and the split appears
-            here from the next sync.
-          </div>
-        )}
+        {/* Fires whenever ANY work is unassigned, not only when all of it is.
+            The old condition required a single department called Unassigned,
+            so the case that actually happens — most of the work unattributed
+            alongside two or three named departments — never showed the notice
+            at all, and the manager was left to work out for themselves why the
+            biggest bar on their dashboard had no name. */}
+        {(() => {
+          const un = departments.find(d => d.department === 'Unassigned'
+                                        || d.department === 'Unknown');
+          if (!un) return null;
+          const share = Math.round(100 * un.total /
+            Math.max(1, departments.reduce((a, d) => a + d.total, 0)));
+          return (
+            <div className="banner warn">
+              <strong>{un.total} task{un.total === 1 ? '' : 's'} ({share}%) have no
+              department.</strong> These reports name a person but not a team, and the
+              sender&rsquo;s address does not identify one either. Tell the product who
+              belongs where on the <a href="/roster">Team roster</a> — it applies to work
+              already imported, not only to reports that arrive next.
+            </div>
+          );
+        })()}
 
         <h2>Departments</h2>
         <div className="table-wrap">

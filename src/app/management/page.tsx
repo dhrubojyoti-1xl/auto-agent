@@ -380,12 +380,30 @@ export default async function ManagementPage({
               </div>
             )}
 
+            {(() => {
+              const un = depts.find(x => x.department === 'Unassigned'
+                                      || x.department === 'Unknown');
+              if (!un) return null;
+              const share = Math.round(100 * un.total /
+                Math.max(1, depts.reduce((a, x) => a + x.total, 0)));
+              return (
+                <div className="banner warn">
+                  <strong>{un.total} task{un.total === 1 ? '' : 's'} ({share}%) sit under
+                  &ldquo;Unassigned&rdquo;.</strong> Department reporting is only as complete
+                  as the list of who belongs where. Fill it in on the{' '}
+                  <a href="/roster">Team roster</a> and this work moves to its department
+                  immediately &mdash; including the rows already imported.
+                </div>
+              );
+            })()}
+
             <h2>Department detail</h2>
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th>Department</th><th className="num">Tasks</th><th className="num">Completed</th>
+                    <th>Department</th><th>Manager</th>
+                    <th className="num">Tasks</th><th className="num">Completed</th>
                     <th className="num">Pending</th><th className="num">Blocked</th>
                     <th className="num">Completion</th><th className="num">Slow</th>
                     <th className="num">Repeated</th><th className="num">People</th>
@@ -395,6 +413,11 @@ export default async function ManagementPage({
                   {depts.map(d => (
                     <tr key={d.department}>
                       <td><Link href={qs({ department: d.department })}>{d.department}</Link></td>
+                      {/* Asked for by name: without it the only people on this
+                          screen are the ones filing reports, and a manager
+                          reading it cannot tell who is accountable for a
+                          department from who is reporting into it. */}
+                      <td>{d.manager || <span className="muted">not set</span>}</td>
                       <td className="num">{d.total}</td>
                       <td className="num">{d.completed}</td>
                       <td className="num">{d.pending + d.inProgress}</td>
