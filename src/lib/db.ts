@@ -460,3 +460,122 @@ export async function loadProductiveThreads(ownerUserId: number): Promise<Set<st
     [ownerUserId]);
   return new Set(rows.map(r => r.gmail_thread_id));
 }
+
+/* ==========================================================================
+ * The roster — who belongs to which department, and who runs it.
+ * ======================================================================== */
+
+/**
+ * Writes an imported roster.
+ *
+ * Deliberately an UPSERT keyed on a name-derived id, not an insert: a manager
+ * re-pastes a corrected sheet and expects the corrections to land, not a second
+ * copy of everybody. `auto_created` is cleared on the way through, because a
+ * person who was previously guessed at from a report is now stated by the
+ * organisation, and the purge in /api/admin/reset must stop treating them as
+ * disposable demo data.
+ *
+ * Aliases are merged rather than replaced. A name the importer learned from an
+ * earlier sheet is still true, and dropping it would quietly start filing that
+ * person's rows under Unassigned again.
+ */
+export async function upsertRoster(
+  people: { id: string; name: string; department: string; email: string;
+            aliases: string[]; role: string }[],
+  departments: { id: string; name: string; manager: string; managerEmail: string }[]
+): Promise<{ people: number; departments: number }> {
+  for (const d of departments) {
+    await query(
+      `insert into departments (department_id, department_name, name_aliases,
+                                manager, manager_email, sender_domains, active)
+       values ($1,$2,'{}',$3,$4,'{}',true)
+       -- On the NAME, not the id. A department the seed or an earlier import
+       -- already created has its own id, and conflicting on the id would sail
+       -- past that row and then trip the unique constraint on the name — which
+       -- is how an import of a perfectly good staff list fails with a message
+       -- about a key nobody has ever seen.
+       on conflict (department_name) do update set
+         manager       = coalesce(nullif(excluded.manager, ''), departments.manager),
+         manager_email = coalesce(nullif(excluded.manager_email, ''), departments.manager_email),
+         active = true`,
+      [d.id, d.name, d.manager || null, d.managerEmail || null]
+    );
+  }
+  for (const p of people) {
+    await query(
+      `insert into employees (employee_id, employee_name, name_aliases, department,
+                              active, auto_created, role, email)
+       values ($1,$2,$3,$4,true,false,$5,$6)
+       on conflict (employee_id) do update set
+         employee_name = excluded.employee_name,
+         name_aliases  = (
+           select coalesce(array_agg(distinct a), '{}')
+             from unnest(employees.name_aliases || excluded.name_aliases) as a
+            where a is not null and a <> ''
+         ),
+         department   = excluded.department,
+         role         = coalesce(nullif(excluded.role, ''), employees.role),
+         email        = coalesce(nullif(excluded.email, ''), employees.email),
+         active       = true,
+         auto_created = false`,
+      [p.id, p.name, p.aliases, p.department || null, p.role || null, p.email || null]
+    );
+  }
+  return { people: people.length, departments: departments.length };
+}
+
+/** The roster as it currently stands, for the page that shows it. */
+export async function loadRoster(): Promise<{
+  people: { id: string; name: string; department: string; email: string;
+            aliases: string[]; role: string; autoCreated: boolean }[];
+  departments: { id: string; name: string; manager: string; managerEmail: string }[];
+}> {
+  const [emp, dep] = await Promise.all([
+    query<Record<string, unknown>>(
+      `select employee_id, employee_name, department, email, name_aliases, role, auto_created
+         from employees where active order by department nulls last, employee_name`),
+    query<Record<string, unknown>>(
+      `select department_id, department_name, manager, manager_email
+         from departments where active order by department_name`)
+  ]);
+  return {
+    people: emp.map(r => ({
+      id: String(r.employee_id), name: String(r.employee_name),
+      department: String(r.department ?? ''), email: String(r.email ?? ''),
+      aliases: (r.name_aliases as string[]) || [], role: String(r.role ?? ''),
+      autoCreated: Boolean(r.auto_created)
+    })),
+    departments: dep.map(r => ({
+      id: String(r.department_id), name: String(r.department_name),
+      manager: String(r.manager ?? ''), managerEmail: String(r.manager_email ?? '')
+    }))
+  };
+}
+
+/**
+ * Runs several statements as one unit on a single connection.
+ *
+ * The pool hands out a different connection per query, so a bare sequence of
+ * `query()` calls is not a transaction however it reads — a failure halfway
+ * through leaves the earlier statements committed. Anything that must not be
+ * half-applied belongs in here.
+ */
+export async function withTransaction<T>(
+  fn: (q: (text: string, params?: unknown[]) => Promise<unknown[]>) => Promise<T>
+): Promise<T> {
+  const client = await getPool().connect();
+  try {
+    await client.query('begin');
+    const result = await fn(async (text, params = []) => {
+      const r = await client.query(text, params as unknown[]);
+      return r.rows;
+    });
+    await client.query('commit');
+    return result;
+  } catch (e) {
+    try { await client.query('rollback'); } catch { /* the original error matters more */ }
+    throw e;
+  } finally {
+    client.release();
+  }
+}

@@ -185,12 +185,34 @@ function buildTaskRecord(
   }
   if (emp.isNew) problems.push('Employee auto-created from this document');
 
-  // Department precedence: explicit column > employee master > document hint >
+  // Department precedence: roster > explicit column > document hint >
   // configured default. The default is a placeholder, not a fact, so a real
   // signal must still beat it — and department is part of the fingerprint, so
   // this must resolve identically on every run.
+  //
+  // The roster leads because it is the organisation's own record of who belongs
+  // where, maintained deliberately, while the department cell in a daily report
+  // is typed in a hurry by whoever filled the sheet. One mistyped cell must not
+  // move a person between departments — that is precisely how a manager ends up
+  // reading a department report that is missing half its team.
+  //
+  // It leads only for someone actually ON the roster. An auto-created employee's
+  // department came from this very document, so there is nothing to prefer, and
+  // preferring it would let a report silently confirm its own guess.
   const deptFromMaster = emp.department && emp.department !== cfg.defaultDepartment ? emp.department : '';
-  const department = deptFromRow || deptFromMaster || ctx.departmentHint || cfg.defaultDepartment;
+  const rosterWins = !emp.isNew && !!deptFromMaster;
+  const department = rosterWins
+    ? deptFromMaster
+    : (deptFromRow || deptFromMaster || ctx.departmentHint || cfg.defaultDepartment);
+
+  // Never silently. A disagreement between the roster and the report is worth
+  // seeing: either the sheet is wrong, or somebody has moved team and the
+  // roster is stale. Both are things a manager can act on.
+  if (rosterWins && deptFromRow && deptFromRow !== deptFromMaster) {
+    problems.push(
+      `Report filed this row under ${deptFromRow}, but the roster has ` +
+      `${emp.name} in ${deptFromMaster}; the roster was used`);
+  }
 
   // --- Task (required) ---
   const rawTask = cleanWhitespace(raw.task);

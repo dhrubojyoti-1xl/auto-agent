@@ -16,6 +16,7 @@ const LINKS: [string, string, boolean?][] = [
   ['/slow', 'Slow tasks'],
   ['/quality', 'Data quality'],
   ['/health', 'Sync health'],
+  ['/roster', 'Team roster'],
   ['/submit', 'Manual entry', true]
 ];
 
