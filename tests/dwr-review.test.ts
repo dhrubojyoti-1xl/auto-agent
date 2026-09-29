@@ -125,6 +125,23 @@ describe('the DWR format imports as it is', () => {
     expect(res.accepted.map(t => t.employeeName)).toEqual(['Asha Rao', 'Asha Rao', 'Asha Rao']);
   });
 
+  it('keeps an empty first cell in a typed "a | b | c" table in its column', () => {
+    const typed = [
+      'DWR: 001 | Emp Name: Asha Rao | Designation | Date: 26/09/2026 | Day: Saturday | Full Day',
+      HEAD.join(' | '),
+      '1 | Adhoc | SOP | SOP index | Prepared the SOP index | All | 90 | ',
+      '  | Adhoc |  |  |  | All |  | '
+    ].join('\n');
+    const res = ingestDocument(doc({ text: typed }), seedMasters([]), cfg, new Map());
+    expect(res.rejected).toEqual([]);
+    expect(res.accepted.map(t => [t.employeeName, t.task, t.taskStatus]))
+      .toEqual([['Asha Rao', 'Prepared the SOP index', 'Completed']]);
+    // A table written with outer pipes still loses only the notation.
+    const md = '| Date | Employee | Task | Status |\n|---|---|---|---|\n' +
+      '| 26/09/2026 | Asha Rao | Checked the audit sheet | Done |';
+    expect(ingestDocument(doc({ text: md }), seedMasters([]), cfg, new Map()).accepted).toHaveLength(1);
+  });
+
   it('keeps a quoted cell with a line break in one piece', () => {
     const tsv = 'Date\tEmployee\tTask\tStatus\n' +
       '26/09/2026\tAsha Rao\t"Fixed login\nand signup"\tDone\n' +
