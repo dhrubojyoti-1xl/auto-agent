@@ -6,7 +6,7 @@ import { BarChart, DataTable, DonutChart, LineChart, RankChart } from '../charts
 import ChartSwitch from '../charts/switch';
 import {
   getDepartmentBreakdown, getEmployeeActivityPanel, getFilterOptions, getKpis, getPeriodSeries,
-  getRepeatGroups, getSlowTaskChart, getStatusDistribution, type Grain
+  countSlowTasks, getRepeatGroups, getSlowTaskChart, getStatusDistribution, type Grain
 } from '@/lib/queries';
 import { compareCounts, compareRates, getAttention, getCoverage } from '@/lib/analytics';
 import type { Delta } from '@/lib/analytics';
@@ -75,7 +75,7 @@ export default async function ManagementPage({
   const windowFrom = from || series[0]?.period;
   const scope = { department, employee, from: windowFrom, to };
 
-  const [depts, status, activity, options, slow, repeats, kpis, coverage, attention] =
+  const [depts, status, activity, options, slow, slowCount, repeats, kpis, coverage, attention] =
     await Promise.all([
       getDepartmentBreakdown(uid, { employee, from: windowFrom, to }),
       getStatusDistribution(uid, scope),
@@ -83,6 +83,7 @@ export default async function ManagementPage({
       // With a department chosen, the Employee list offers only its people.
       getFilterOptions(uid, { department }),
       getSlowTaskChart(uid, { ...scope, limit: 8 }),
+      countSlowTasks(uid, scope),
       getRepeatGroups(uid, scope),
       getKpis(uid),
       getCoverage(uid),
@@ -218,13 +219,18 @@ export default async function ManagementPage({
             <div className="kpis secondary">
               <Kpi label="Departments" value={latest?.departments ?? 0}
                    note={`${latest?.employees ?? 0} reporting`} />
+              {/* Each note says what its number covers: the first two are this
+                  period, the last two the whole window shown on the page. */}
               <Kpi label="People reporting" value={latest?.employees ?? 0}
-                   note={`over ${series.length} ${PERIOD_PLURAL[grain]}`} />
-              <Kpi label="Slow tasks" value={slow.length}
-                   note={slow.length ? 'measured against comparable work'
-                                     : 'none measurable from this data'} />
+                   note={`this ${PERIOD_NOUN[grain]}`} />
+              <Kpi label="Slow tasks" value={slowCount}
+                   note={slowCount
+                     ? `over the last ${series.length} ${PERIOD_PLURAL[grain]}, against comparable work`
+                     : 'none measurable from this data'} />
               <Kpi label="Repeated work" value={repeats.length}
-                   note={repeats.length ? 'recurring items' : 'none yet'} />
+                   note={repeats.length
+                     ? `recurring items over the last ${series.length} ${PERIOD_PLURAL[grain]}`
+                     : 'none yet'} />
             </div>
 
             <h2>Trends</h2>
