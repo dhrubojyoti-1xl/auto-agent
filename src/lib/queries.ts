@@ -443,6 +443,11 @@ export async function getEmployeeActivityPanel(
  * The employee list holds people only, and with a department chosen, only the
  * people who reported under it — a Support filter offering the whole company
  * (and every task title ever mistaken for a name) is not a filter.
+ *
+ * With ROSTER_ONLY on, the roster is the organisation, so its departments and
+ * people are offered too — including anyone who has not reported yet, which
+ * is exactly who a manager filters for. Before, an account whose reports had
+ * not arrived showed empty drop-downs beside a 14-department roster.
  */
 export async function getFilterOptions(
   ownerUserId: number, opts: { department?: string } = {}
@@ -453,7 +458,8 @@ export async function getFilterOptions(
     empParams.push(opts.department);
     empWhere += ` and coalesce(department,'Unknown') = $2`;
   }
-  const [depts, emps, range, isPerson] = await Promise.all([
+  const rosterOnly = /^(1|true|yes|on)$/i.test(process.env.ROSTER_ONLY || '');
+  const [depts, emps, range, isPerson, roster] = await Promise.all([
     query<{ d: string }>(
       `select distinct coalesce(department,'Unknown') as d from tasks
        where owner_user_id = $1 order by 1`, [ownerUserId]),
@@ -463,11 +469,29 @@ export async function getFilterOptions(
     query<{ min_date: string | null; max_date: string | null }>(
       `select min(task_date) as min_date, max(task_date) as max_date from tasks
        where owner_user_id = $1`, [ownerUserId]),
-    personFilter()
+    personFilter(),
+    rosterOnly
+      ? query<{ name: string; department: string }>(
+          `select employee_name as name, department from employees
+            where active and not auto_created
+              and department is not null and department <> ''`)
+      : Promise.resolve([] as { name: string; department: string }[])
   ]);
+  const departments = depts.map(r => r.d);
+  const employees = emps.map(r => r.e).filter(isPerson);
+  if (roster.length) {
+    const byName = (a: string, b: string) => a.localeCompare(b);
+    const d = new Set(departments), e = new Set(employees);
+    for (const p of roster) {
+      d.add(p.department);
+      if (!opts.department || p.department === opts.department) e.add(p.name);
+    }
+    departments.splice(0, departments.length, ...[...d].sort(byName));
+    employees.splice(0, employees.length, ...[...e].sort(byName));
+  }
   return {
-    departments: depts.map(r => r.d),
-    employees: emps.map(r => r.e).filter(isPerson),
+    departments,
+    employees,
     minDate: range[0]?.min_date ? String(range[0].min_date) : null,
     maxDate: range[0]?.max_date ? String(range[0].max_date) : null
   };
@@ -723,7 +747,19 @@ export async function getDepartmentDay(ownerUserId: number, date?: string) {
       order by 1 desc limit 45`, [ownerUserId]);
   const available = days.map(r => r.d);
   const day = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : available[0];
-  if (!day) return { date: null as string | null, available, rows: [], roster: [], isPerson: (_: string) => false };
+  // The roster is read even when there is no day to show, so an empty page can
+  // still say which departments it is waiting for.
+  const rosterRows = () => query<{ employee_name: string; department: string | null }>(
+    `select employee_name, department from employees
+      where active and not auto_created and department is not null and department <> ''`);
+  if (!day) {
+    const roster = await rosterRows();
+    return {
+      date: null as string | null, available, rows: [],
+      roster: roster.map(r => ({ name: r.employee_name, department: String(r.department) })),
+      isPerson: (_: string) => false
+    };
+  }
 
   const [rows, roster, isPerson] = await Promise.all([
     query<Record<string, string | number | null>>(
@@ -732,9 +768,7 @@ export async function getDepartmentDay(ownerUserId: number, date?: string) {
               actual_duration, work_kind
          from tasks where owner_user_id = $1 and task_date = $2
         order by department, employee_name, task_id`, [ownerUserId, day]),
-    query<{ employee_name: string; department: string | null }>(
-      `select employee_name, department from employees
-        where active and not auto_created and department is not null and department <> ''`),
+    rosterRows(),
     personFilter()
   ]);
   return {

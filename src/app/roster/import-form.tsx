@@ -70,7 +70,7 @@ export default function ImportForm() {
         onChange={e => { setText(e.target.value); setRes(null); }}
         rows={8}
         spellCheck={false}
-        placeholder={'Department\tEmployee\tEmail\tAlso known as\nSOP\tRahul Koli\trahul@1xl.com\tRahul K'}
+        placeholder={'Department\tEmployee\tEmail\tAlso known as\nOperations\tAda Lovelace\tada@yourcompany.com\tAda L'}
         style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: '0.85rem' }}
       />
 

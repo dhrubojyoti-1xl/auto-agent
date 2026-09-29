@@ -395,8 +395,6 @@ a.card-link:hover .dept-card,
 @media (min-width: 1280px) {
   .chart-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
-nav.top a.secondary-link { opacity: .62; }
-nav.top a.secondary-link:hover { opacity: 1; }
 
 /* ---- loading ------------------------------------------------------ */
 .skeleton {

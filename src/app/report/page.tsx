@@ -23,7 +23,8 @@ export default async function ReportPage({
   ]);
   const aiConfigured = !!process.env.ANTHROPIC_API_KEY;
   const days = day.date ? summariseDepartmentDay(day.rows, day.roster, day.isPerson) : [];
-  const silent = day.date ? silentDepartments(day.roster, days) : [];
+  // With no report yet, every roster department is one the page is waiting for.
+  const silent = silentDepartments(day.roster, days);
 
   return (
     <>

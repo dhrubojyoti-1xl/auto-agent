@@ -32,6 +32,7 @@ export function pastedDocument(
     html: isHtml ? content : undefined,
     text: isHtml ? undefined : content,
     ...(employee ? { statedEmployee: employee } : {}),
-    ...(date ? { titleDate: { date, quote: 'entered on the Manual entry form' } } : {})
+    ...(date ? { statedDate: date,
+                 titleDate: { date, quote: 'entered on the Manual entry form' } } : {})
   };
 }

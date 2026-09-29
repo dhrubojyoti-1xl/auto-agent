@@ -3,7 +3,8 @@ import Nav from '../nav';
 import { getSession } from '@/lib/auth';
 import { formatDay, formatStamp } from '@/lib/format-date';
 import OtherMessagesNote from '../other-messages';
-import { looksLikePersonName } from '@/lib/core/person-name';
+import { likelySamePerson, looksLikePersonName } from '@/lib/core/person-name';
+import { loadRoster } from '@/lib/db';
 import {
   getAutoCreatedEmployees, getDocuments, getMessageOutcomes, getOtherMessageCount,
   getRejections
@@ -14,18 +15,26 @@ export const dynamic = 'force-dynamic';
 export default async function QualityPage() {
   const session = await getSession();
   if (!session) redirect('/login');
-  const [rejections, documents, invented, outcomes, otherMessages] = await Promise.all([
+  const [rejections, documents, invented, outcomes, otherMessages, roster] = await Promise.all([
     getRejections(session.userId), getDocuments(session.userId, 30),
     getAutoCreatedEmployees(session.userId), getMessageOutcomes(session.userId, 50),
-    getOtherMessageCount(session.userId)
+    getOtherMessageCount(session.userId), loadRoster()
   ]);
+  const rosterNames = roster.people.filter(p => !p.autoCreated).map(p => p.name);
+  const hasRoster = rosterNames.length > 0;
 
   // An earlier importer recorded task titles, places and lists of names as
   // people ("Attendance Monitoring", "Dubai", "Admin Panel"). The records are
   // left as they are; only names that could be a person are listed, and the
   // rest are counted, because five hundred task titles bury the handful of
   // real people a manager needs to check.
-  const assumedPeople = invented.filter(e => looksLikePersonName(e.name));
+  //
+  // A guessed name with no work filed under it in this account is not this
+  // account's business: test names from another inbox, filed under departments
+  // this company does not have, were being listed here as colleagues.
+  const personLike = invented.filter(e => looksLikePersonName(e.name));
+  const assumedPeople = personLike.filter(e => e.tasks > 0);
+  const idleGuesses = personLike.length - assumedPeople.length;
   const notPeople = invented.filter(e => !looksLikePersonName(e.name));
   const notPeopleTasks = notPeople.reduce((a, e) => a + e.tasks, 0);
 
@@ -144,13 +153,22 @@ export default async function QualityPage() {
             {notPeopleTasks > 0
               ? ` (${notPeopleTasks} task${notPeopleTasks === 1 ? '' : 's'} in this account are filed under them)`
               : ' (no tasks in this account are filed under them)'}.
-            They are not shown. Importing the <a href="/roster">Team roster</a> puts the real
-            people on record.
+            They are not shown{hasRoster
+              ? <>. The <a href="/roster">Team roster</a> is the list of real people.</>
+              : <>. Importing the <a href="/roster">Team roster</a> puts the real people on
+                record.</>}
+          </p>
+        )}
+        {idleGuesses > 0 && (
+          <p className="small muted">
+            {idleGuesses} more name{idleGuesses === 1 ? '' : 's'} taken from old reports
+            {idleGuesses === 1 ? ' has' : ' have'} no work filed in this account and
+            {idleGuesses === 1 ? ' is' : ' are'} not shown.
           </p>
         )}
         {assumedPeople.length === 0 ? (
           <div className="card small muted">
-            {notPeople.length
+            {notPeople.length || idleGuesses
               ? 'No one else was assumed.'
               : 'Every name in every report matched someone already on the roster.'}
           </div>
@@ -167,7 +185,7 @@ export default async function QualityPage() {
                 <thead>
                   <tr>
                     <th>Name</th><th>Assumed department</th><th className="num">Tasks</th>
-                    <th>First seen</th><th>Last seen</th>
+                    <th>First seen</th><th>Last seen</th><th>Possibly the same as</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -178,6 +196,7 @@ export default async function QualityPage() {
                       <td className="num">{e.tasks}</td>
                       <td className="small">{e.firstSeen || '—'}</td>
                       <td className="small">{e.lastSeen || '—'}</td>
+                      <td className="small">{likelySamePerson(e.name, rosterNames) || '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -197,6 +216,9 @@ export default async function QualityPage() {
               </tr>
             </thead>
             <tbody>
+              {documents.length === 0 && (
+                <tr><td colSpan={9} className="small muted">No imports yet.</td></tr>
+              )}
               {documents.map(d => (
                 <tr key={d.reportId}>
                   <td className="small">{formatStamp(d.processedAt)}</td>

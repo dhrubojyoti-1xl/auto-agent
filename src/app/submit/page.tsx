@@ -42,7 +42,7 @@ export default function SubmitPage() {
     <>
       <Nav />
       <main className="shell">
-        <h1>Submit a report</h1>
+        <h1>Manual entry</h1>
         <p className="sub">
           Select the report in Google Sheets or Excel — the DWR title row included — copy it,
           and paste it below. A table copied from an email, or a plain{' '}

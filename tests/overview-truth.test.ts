@@ -23,13 +23,13 @@ describe('timestamps survive whatever the driver returns', () => {
   it('formats a Date object, which is what the driver actually returns', () => {
     // String(asDate) is "Sat Aug 30 2026 07:09:00 GMT…", and slicing that by
     // ISO offsets is what produced "2026" as a time.
-    expect(formatStamp(asDate)).toBe('2026-08-30 07:09');
+    expect(formatStamp(asDate)).toBe('2026-08-30 12:39 IST');
     expect(formatDay(asDate)).toBe('2026-08-30');
-    expect(formatTime(asDate)).toBe('07:09');
+    expect(formatTime(asDate)).toBe('12:39');
   });
 
   it('formats an ISO string identically', () => {
-    expect(formatStamp(iso)).toBe('2026-08-30 07:09');
+    expect(formatStamp(iso)).toBe('2026-08-30 12:39 IST');
     expect(formatStamp(asDate)).toBe(formatStamp(iso));
   });
 

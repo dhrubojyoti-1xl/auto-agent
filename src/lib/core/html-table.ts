@@ -321,16 +321,22 @@ function headingNamesSomethingElse(header: string): boolean {
   return ranked.length > 0 && !ranked.some(g => g.field === 'employee');
 }
 
-export function mapHeaderRow(rows: Cell[][], masters: Masters, cfg: EngineConfig): HeaderMap | null {
+export function mapHeaderRow(
+  rows: Cell[][], masters: Masters, cfg: EngineConfig,
+  stated: { employee?: boolean; date?: boolean } = {}
+): HeaderMap | null {
   const scanLimit = Math.min(rows.length, 6);
 
   // A title line can state the author and the day for every row, in which case
-  // the table does not need columns for them.
+  // the table does not need columns for them. So can the person submitting it:
+  // the Manual entry form's Employee and Report date fields exist for a table
+  // that names no one or no day, and a table with neither column was refused
+  // even with both fields filled in.
   const banner: Banner | null = readBanner(rows, cfg.dateOrder, scanLimit);
   const has = (f: Field, mapping: Partial<Record<Field, number>>) =>
     f in mapping ||
-    (f === 'employee' && !!banner?.employee) ||
-    (f === 'date' && !!banner?.date) ||
+    (f === 'employee' && (!!banner?.employee || !!stated.employee)) ||
+    (f === 'date' && (!!banner?.date || !!stated.date)) ||
     // A DWR row whose "What did I do?" is empty still names the work it was
     // meant to be; a table with only the planned column is still a report.
     (f === 'task' && 'plannedTask' in mapping);

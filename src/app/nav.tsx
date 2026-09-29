@@ -4,8 +4,9 @@ import { usePathname, useRouter } from 'next/navigation';
 
 /**
  * Ordered by how often a manager needs them. Management first, because that is
- * where the answer to "what happened" lives; Manual entry last and quieter,
- * because the whole point of the product is that nobody uses it day to day.
+ * where the answer to "what happened" lives; Manual entry last, because the
+ * whole point of the product is that nobody uses it day to day. Last, not
+ * greyed out: at 62% opacity it read as a disabled link.
  */
 const LINKS: [string, string, boolean?][] = [
   ['/management', 'Management'],
