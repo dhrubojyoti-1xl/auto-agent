@@ -27,9 +27,14 @@ function nextScheduledSync(): string {
   return formatStamp(next);
 }
 
-/** "08:30 IST" — the daily 03:00 UTC run, in the zone the page uses. */
-function scheduleTime(): string {
-  return formatStamp(new Date(Date.UTC(2026, 0, 1, 3, 0, 0))).slice(11);
+/**
+ * "between 08:30 and 09:30 IST". The hosting plan starts a daily job at some
+ * minute within the scheduled hour, not on it: stating 08:30 beside runs at
+ * 08:52 read as the schedule being wrong.
+ */
+function scheduleWindow(): string {
+  const at = (h: number) => formatStamp(new Date(Date.UTC(2026, 0, 1, h, 0, 0))).slice(11);
+  return `between ${at(3).replace(/ \S+$/, '')} and ${at(4)}`;
 }
 
 /** PHASE 24 — everything an operator needs to trust the pipeline, in one place. */
@@ -156,8 +161,9 @@ export default async function SyncHealthPage() {
                    note={needsReconnect ? '— reconnect above to resume' : ''} />
               <Row label="Last successful sync"
                    value={formatStamp(runs.find(r => r.status === 'OK')?.startedAt, 'never')} />
-              <Row label="Automatic schedule" value={`daily at ${scheduleTime()}`}
-                   note={`— next run ${nextScheduledSync()}. Sync now on the Inbox page checks at any time.`} />
+              <Row label="Automatic schedule" value={`daily, ${scheduleWindow()}`}
+                   note={`— next run ${nextScheduledSync().slice(0, 10)}, at some point in that hour. ` +
+                         'Sync now on the Inbox page checks at any time.'} />
               <Row label="AI commentary"
                    value={process.env.ANTHROPIC_API_KEY ? 'configured' : 'not configured'}
                    note={process.env.ANTHROPIC_API_KEY

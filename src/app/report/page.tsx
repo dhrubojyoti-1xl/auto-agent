@@ -49,7 +49,7 @@ export default async function ReportPage({
               'deterministic layer — every section still works.'}
         </div>
 
-        <ReportControls aiConfigured={aiConfigured} />
+        <ReportControls aiConfigured={aiConfigured} hasData={day.available.length > 0} />
 
         {latest && (
           <>

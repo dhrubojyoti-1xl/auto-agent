@@ -48,6 +48,9 @@ export default async function RosterPage() {
     byDepartment.set(k, [...(byDepartment.get(k) || []), p]);
   });
   const managerOf = new Map(departments.map(d => [d.name, d]));
+  // Said once per department only when it tells the reader something: on a
+  // roster with no managers at all it read as fourteen warnings.
+  const anyManager = departments.some(d => d.manager);
   const unstaffed = departments.filter(d =>
     !byDepartment.has(d.name) && d.manager && d.name.toLowerCase() !== 'unassigned');
 
@@ -127,7 +130,7 @@ export default async function RosterPage() {
                     {members.length} {members.length === 1 ? 'person' : 'people'}
                     {d?.manager
                       ? ` · manager ${d.manager}${d.managerEmail ? ` (${d.managerEmail})` : ''}`
-                      : ' · no manager recorded'}
+                      : anyManager ? ' · no manager recorded' : ''}
                   </p>
                   <div style={{ overflowX: 'auto' }}>
                     <table>
