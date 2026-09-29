@@ -3,6 +3,7 @@ import Nav from '../nav';
 import ImportForm from './import-form';
 import { getSession } from '@/lib/auth';
 import { loadRoster } from '@/lib/db';
+import { looksLikePersonName } from '@/lib/core/person-name';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,8 +20,17 @@ export default async function RosterPage() {
   const session = await getSession();
   if (!session) redirect('/login');
 
-  const { people, departments } = await loadRoster();
-  const guessed = people.filter(p => p.autoCreated);
+  const { people: everyone, departments } = await loadRoster();
+  // The roster is the list the organisation gave. Records the importer made up
+  // from reports are shown apart from it: the ones that could be a person as a
+  // short list to confirm, and the rest — task titles, places, software panels
+  // an earlier version filed as people — as a count. Nothing is deleted.
+  const people = everyone.filter(p => !p.autoCreated);
+  const guessed = everyone.filter(p => p.autoCreated);
+  const guessedPeople = guessed.filter(p => looksLikePersonName(p.name))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const guessedJunk = guessed.length - guessedPeople.length;
+  const rosterOnly = /^(1|true|yes|on)$/i.test(process.env.ROSTER_ONLY || '') && people.length > 0;
   const undeclared = people.filter(p => !p.department);
   const byDepartment = new Map<string, typeof people>();
   people.forEach(p => {
@@ -43,14 +53,21 @@ export default async function RosterPage() {
             </p>
           </div>
           <div className="page-meta">
-            <span><b>{people.length}</b> {people.length === 1 ? 'person' : 'people'}</span>
-            <span><b>{departments.length}</b>{' '}
-              {departments.length === 1 ? 'department' : 'departments'}</span>
-            {guessed.length > 0 && <span><b>{guessed.length}</b> guessed</span>}
+            <span><b>{people.length}</b> on your list</span>
+            <span><b>{byDepartment.size}</b>{' '}
+              {byDepartment.size === 1 ? 'department' : 'departments'}</span>
+            {guessedPeople.length > 0 && <span><b>{guessedPeople.length}</b> guessed</span>}
           </div>
         </div>
 
-        {(guessed.length > 0 || undeclared.length > 0) && (
+        {rosterOnly && (
+          <div className="banner ok" style={{ marginBottom: '1rem' }}>
+            <strong>Only the people on your list are imported.</strong> Reports from anyone
+            else are left out. Add someone below if they should be included.
+          </div>
+        )}
+
+        {(guessedPeople.length > 0 || undeclared.length > 0) && (
           <div className="chart-card" style={{ marginBottom: '1.2rem' }}>
             <h3>Worth confirming</h3>
             {undeclared.length > 0 && (
@@ -62,13 +79,13 @@ export default async function RosterPage() {
                 Their work is counted, but it shows as Unassigned.
               </p>
             )}
-            {guessed.length > 0 && (
+            {guessedPeople.length > 0 && (
               <p>
-                <b>{guessed.length}</b>{' '}
-                {guessed.length === 1 ? 'name was' : 'names were'} taken from a report rather
-                than from you: {guessed.slice(0, 12).map(p => p.name).join(', ')}
-                {guessed.length > 12 && ` and ${guessed.length - 12} more`}.
-                Including them below confirms them; leaving them out changes nothing.
+                <b>{guessedPeople.length}</b>{' '}
+                {guessedPeople.length === 1 ? 'name was' : 'names were'} taken from old
+                reports and {guessedPeople.length === 1 ? 'is' : 'are'} not on your list
+                {rosterOnly ? ', so their reports are not imported' : ''}. If any of them
+                should be, add them in the list below.
               </p>
             )}
           </div>
@@ -115,9 +132,7 @@ export default async function RosterPage() {
                             <td>{p.role || '—'}</td>
                             <td>{p.email || '—'}</td>
                             <td>{p.aliases.join(', ') || '—'}</td>
-                            <td className="cap">
-                              {p.autoCreated ? 'guessed from a report' : 'you'}
-                            </td>
+                            <td className="cap">your list</td>
                           </tr>
                         ))}
                       </tbody>
@@ -126,6 +141,36 @@ export default async function RosterPage() {
                 </div>
               );
             })
+        )}
+
+        {guessedPeople.length > 0 && (
+          <details className="chart-card" style={{ marginBottom: '1rem' }}>
+            <summary style={{ cursor: 'pointer' }}>
+              <b>Guessed from old reports, not on your list</b>{' '}
+              <span className="muted">({guessedPeople.length})</span>
+            </summary>
+            <p className="cap" style={{ marginTop: '.6rem' }}>
+              Names an earlier import took from reports. The department is its guess.
+            </p>
+            <div style={{ overflowX: 'auto' }}>
+              <table>
+                <thead><tr><th>Name</th><th>Guessed department</th></tr></thead>
+                <tbody>
+                  {guessedPeople.map(p => (
+                    <tr key={p.id}><td>{p.name}</td><td>{p.department || '—'}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        )}
+
+        {guessedJunk > 0 && (
+          <p className="small muted">
+            {guessedJunk} more record{guessedJunk === 1 ? ' is' : 's are'} task titles, places
+            and lists of names that an earlier version filed as people. They are not shown and
+            are not used for anything.
+          </p>
         )}
 
         {departments.filter(d => !byDepartment.has(d.name)).length > 0 && (
