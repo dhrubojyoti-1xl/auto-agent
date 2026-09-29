@@ -157,7 +157,8 @@ describe('task titles are never employees', () => {
       'India Today Group', 'Human Resource', 'Travel Reimbursement', 'Welcome Kit',
       'Warning Letter', 'Cv Database', 'Organisational Chart', 'Welfare Committee',
       'Doj Confirmation', 'Birthday Posters', 'Probation Tracking', 'Google Sheets', 'Na',
-      'Jainam & Jivika Jain', 'Content Team', 'Response Submiited', 'Gmail Account']) {
+      'Jainam & Jivika Jain', 'Content Team', 'Response Submiited', 'Gmail Account',
+      'Internship Completion Certificate', 'New Joiner System Access']) {
       expect(looksLikePersonName(t), t).toBe(false);
     }
   });

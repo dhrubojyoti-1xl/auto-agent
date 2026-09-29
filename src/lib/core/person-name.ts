@@ -64,7 +64,9 @@ const WORK_WORDS = new Set([
   'confirmation', 'gmail', 'birthday', 'birthdays', 'poster', 'posters',
   'celebration', 'celebrations', 'probation', 'tracking', 'tracker', 'menu',
   'invitation', 'agenda', 'signature', 'payment', 'payments', 'stipend', 'visa',
-  'permit', 'insurance', 'handbook', 'newsletter', 'newsletters', 'magazine'
+  'permit', 'insurance', 'handbook', 'newsletter', 'newsletters', 'magazine',
+  'internship', 'internships', 'certificate', 'certificates', 'completion', 'system',
+  'systems', 'access', 'joiner', 'joiners', 'intern', 'interns'
 ]);
 
 /** Joining words that belong in a phrase, not a name. */
