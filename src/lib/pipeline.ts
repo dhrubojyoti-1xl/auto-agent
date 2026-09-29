@@ -18,7 +18,9 @@ export function engineConfig(): EngineConfig {
   return {
     ...DEFAULT_ENGINE_CONFIG,
     slowTaskMultiplier: Number(process.env.SLOW_TASK_MULTIPLIER || DEFAULT_ENGINE_CONFIG.slowTaskMultiplier),
-    dateOrder: (process.env.DATE_ORDER as 'DMY' | 'MDY') || DEFAULT_ENGINE_CONFIG.dateOrder
+    dateOrder: (process.env.DATE_ORDER as 'DMY' | 'MDY') || DEFAULT_ENGINE_CONFIG.dateOrder,
+    // Opt-in: only people on the Team roster are imported. See docs/OPERATIONS.md.
+    rosterOnly: /^(1|true|yes|on)$/i.test(process.env.ROSTER_ONLY || '')
   };
 }
 

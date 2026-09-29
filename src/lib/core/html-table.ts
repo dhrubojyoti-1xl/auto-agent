@@ -7,8 +7,9 @@
  * blank rows, and plain-text "a | b | c" tables when there is no HTML at all.
  */
 import type {
-  Cell, ColumnDecision, EngineConfig, Field, HeaderMap, Masters, Table
+  Banner, Cell, ColumnDecision, EngineConfig, Field, HeaderMap, Masters, Table
 } from './types';
+import { readBanner } from './banner';
 import { confirmWeakHeader, fieldFromValues, VALUE_CONFIDENCE_FLOOR } from './column-values';
 import { cleanWhitespace, decodeEntities, normalizeHeader } from './normalize';
 import { rankHeader } from './semantic-headers';
@@ -185,6 +186,56 @@ export function extractPipeTables(text: string): Table[] {
 }
 
 /**
+ * Plain-text fallback for a paste out of a spreadsheet.
+ *
+ * Copying a range from Google Sheets or Excel puts tab-separated text on the
+ * clipboard — no HTML, no pipes. Read as the "a | b | c" format it produced no
+ * table at all, which is why pasting a Daily Work Report into Manual entry
+ * found nothing. Quoted cells (a task with a line break in it) are honoured.
+ */
+export function extractTabTables(text: string): Table[] {
+  const src = String(text || '');
+  const tabbedLines = src.split(/\r?\n/).filter(l => l.includes('\t')).length;
+  if (tabbedLines < 2) return [];
+  const rows = parseTabbed(src)
+    .map(r => r.map(v => {
+      const t = cleanWhitespace(v);
+      const u = t.match(/https?:\/\/\S+/);
+      return { text: t, href: u ? u[0].replace(/[),.]+$/, '') : '' } as Cell;
+    }))
+    .filter(r => r.some(c => c.text));
+  return rows.length >= 2 ? [{ index: 0, rows, source: 'text' }] : [];
+}
+
+/** RFC 4180 reading with a tab delimiter: quotes, doubled quotes, line breaks in cells. */
+function parseTabbed(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let inQuotes = false;
+  let atFieldStart = true;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else inQuotes = false;
+      } else field += c;
+      continue;
+    }
+    // A quote only opens a quoted cell at the start of one; mid-cell it is text.
+    if (c === '"' && atFieldStart) { inQuotes = true; atFieldStart = false; continue; }
+    if (c === '\t') { row.push(field); field = ''; atFieldStart = true; continue; }
+    if (c === '\r') continue;
+    if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; atFieldStart = true; continue; }
+    field += c;
+    atFieldStart = false;
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+/**
  * Finds the header row and returns the column map, or null when the table is
  * not a report table (a layout table, a signature block, an attendance count).
  */
@@ -238,6 +289,12 @@ function fillFromValues(
 
     if (!guess || guess.confidence < VALUE_CONFIDENCE_FLOOR) continue;
     if (guess.field in out) continue;
+    // Never make a person column out of one whose heading says it is something
+    // else. "What was I supposed to do today?" leans towards the work, and its
+    // short repeated entries ("Hr Meeting", "Attendance Monitoring") look like
+    // names to a shape test; filing them as employees is what put task titles
+    // in the Employee drop-down.
+    if (guess.field === 'employee' && headingNamesSomethingElse(header)) continue;
     out[guess.field] = c;
     taken.add(c);
     added.push({
@@ -250,12 +307,38 @@ function fillFromValues(
   return { mapping: out, added };
 }
 
+/** True when a heading leans towards some field and never towards a person. */
+function headingNamesSomethingElse(header: string): boolean {
+  const ranked = rankHeader(header);
+  return ranked.length > 0 && !ranked.some(g => g.field === 'employee');
+}
+
 export function mapHeaderRow(rows: Cell[][], masters: Masters, cfg: EngineConfig): HeaderMap | null {
   const scanLimit = Math.min(rows.length, 6);
 
+  // A title line can state the author and the day for every row, in which case
+  // the table does not need columns for them.
+  const banner: Banner | null = readBanner(rows, cfg.dateOrder, scanLimit);
+  const has = (f: Field, mapping: Partial<Record<Field, number>>) =>
+    f in mapping ||
+    (f === 'employee' && !!banner?.employee) ||
+    (f === 'date' && !!banner?.date) ||
+    // A DWR row whose "What did I do?" is empty still names the work it was
+    // meant to be; a table with only the planned column is still a report.
+    (f === 'task' && 'plannedTask' in mapping);
+  const withBanner = (m: HeaderMap): HeaderMap => (banner ? { ...m, banner } : m);
+
+  const found = mapHeaderRowWith(rows, masters, cfg, scanLimit, has);
+  return found ? withBanner(found) : null;
+}
+
+function mapHeaderRowWith(
+  rows: Cell[][], masters: Masters, cfg: EngineConfig, scanLimit: number,
+  has: (f: Field, mapping: Partial<Record<Field, number>>) => boolean
+): HeaderMap | null {
   for (let r = 0; r < scanLimit; r++) {
     const { mapping, matches } = mapOneRow(rows[r], masters);
-    const hasRequired = REQUIRED.every(f => f in mapping);
+    const hasRequired = REQUIRED.every(f => has(f, mapping));
     if (matches >= cfg.minHeaderMatches && hasRequired) {
       // The required fields are settled, but a column the headings did not
       // name may still be a department, a link or a duration. Dropping it
@@ -271,7 +354,7 @@ export function mapHeaderRow(rows: Cell[][], masters: Masters, cfg: EngineConfig
     // the columns speak for themselves.
     const filled = fillFromValues(rows, r, mapping, masters, cfg);
     if (filled.added.length) {
-      const nowHasRequired = REQUIRED.every(f => f in filled.mapping);
+      const nowHasRequired = REQUIRED.every(f => has(f, filled.mapping));
       const total = matches + filled.added.length;
       if (nowHasRequired && total >= cfg.minHeaderMatches) {
         return {
@@ -297,7 +380,7 @@ export function mapHeaderRow(rows: Cell[][], masters: Masters, cfg: EngineConfig
   for (let r = 0; r + 1 < scanLimit; r++) {
     const lower = mapOneRow(rows[r + 1], masters);
     const combined = mapOneRow(rows[r], masters, lower.mapping);
-    const hasRequired = REQUIRED.every(f => f in combined.mapping);
+    const hasRequired = REQUIRED.every(f => has(f, combined.mapping));
     const matches = lower.matches + combined.matches;
     if (hasRequired && matches >= cfg.minHeaderMatches &&
         lower.matches > 0 && combined.matches > 0) {
@@ -319,7 +402,7 @@ export function mapHeaderRow(rows: Cell[][], masters: Masters, cfg: EngineConfig
     const filled = fillFromValues(rows, r, header.mapping, masters, cfg);
     const mapping = filled.mapping;
     const matches = header.matches + filled.added.length;
-    const reqHit = REQUIRED.filter(f => f in mapping).length;
+    const reqHit = REQUIRED.filter(f => has(f, mapping)).length;
     if (reqHit >= 3 && matches >= 3) {
       return {
         headerRowIndex: r, mapping, matches, partialHeader: true,

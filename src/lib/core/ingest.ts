@@ -16,7 +16,7 @@ import {
 } from './semantic-headers';
 import type {
   Cell, EngineConfig, Employee, Field, IngestResult, Masters, RejectedRow,
-  SourceDocument, TaskRecord
+  SourceDocument, TaskRecord, TaskStatus
 } from './types';
 import {
   cleanWhitespace, departmentFromSender,
@@ -24,7 +24,7 @@ import {
   normalizeTask, parseDate, parseHours, parseTime, resolveCategory, resolveEmployee,
   shortHash
 } from './normalize';
-import { extractPipeTables, extractTables, mapHeaderRow, tagText } from './html-table';
+import { extractPipeTables, extractTabTables, extractTables, mapHeaderRow, tagText } from './html-table';
 
 /** fingerprint -> the document id that owns it. */
 export type FingerprintIndex = Map<string, string>;
@@ -81,6 +81,53 @@ function isBlankRow(raw: Record<string, string>): boolean {
 }
 
 /**
+ * An unused line of a template.
+ *
+ * The DWR sheet ships with every row pre-filled — "Adhoc" in Company, "All" in
+ * Did I do — so the ten lines nobody wrote in are not blank. Read as rows they
+ * were each rejected for having no task, and the Data quality page filled up
+ * with lines that were never work. A row that names no work at all, and states
+ * no person or day of its own, is an empty line whatever its defaults say.
+ */
+function isTemplateFiller(raw: Record<string, string>): boolean {
+  return !cleanWhitespace(raw.task) && !cleanWhitespace(raw.plannedTask) &&
+         !cleanWhitespace(raw.employee) && !cleanWhitespace(raw.date);
+}
+
+/**
+ * Answers to a status column asked as a question — "Did I do?" — mapped to the
+ * statuses they mean. Only applied under such a heading: "All" and "No" are
+ * not statuses anywhere else.
+ */
+const QUESTION_STATUS = /^(did|have|has|was|is)\b.*\b(do|done|it|complete|completed|finish|finished)\b/i;
+const ANSWERS: [RegExp, TaskStatus][] = [
+  [/^(all|all done|yes|y|fully|full|done|completed?|100 ?%)$/i, 'Completed'],
+  [/^(partial|partially|partly|part|half|some|mostly|in part|\d{1,2} ?%)$/i, 'In Progress'],
+  [/^(no|n|none|nothing|not done|not at all|zero|0 ?%)$/i, 'Pending']
+];
+
+function statusFromAnswer(raw: string, header: string): TaskStatus | null {
+  if (!QUESTION_STATUS.test(cleanWhitespace(header))) return null;
+  const v = cleanWhitespace(raw);
+  for (const [re, status] of ANSWERS) if (re.test(v)) return status;
+  return null;
+}
+
+/**
+ * Duration columns headed in minutes ("Time taken (Minutes)") hold bare
+ * numbers of minutes. Read as hours, a 45-minute task became 45 hours and
+ * every one of them looked catastrophically slow.
+ */
+function durationInHours(raw: string | undefined, header: string): number | null {
+  const v = cleanWhitespace(raw);
+  if (!v) return null;
+  if (/\bmin(s|ute|utes)?\b/i.test(header) && /^\d+(\.\d+)?$/.test(v)) {
+    return Math.round((parseFloat(v) / 60) * 100) / 100;
+  }
+  return parseHours(v);
+}
+
+/**
  * A summary line at the foot of a hand-maintained sheet.
  *
  * The word can sit in any column — whoever typed it put it wherever the layout
@@ -106,6 +153,8 @@ type BuildOk = {
   rowIndex: number;
 };
 type BuildFail = { ok: false; reason: RejectedRow['reason']; detail: string };
+/** Out of scope rather than wrong: roster-only mode and a person not on it. */
+type BuildOutside = { ok: false; outsideRoster: string };
 
 function buildTaskRecord(
   raw: Record<string, string>,
@@ -126,10 +175,16 @@ function buildTaskRecord(
     senderEmployee: string;
     /** The stream the task column described: today's work, a plan, and so on. */
     workKind: string;
+    /** Column headings that change how a value is read. */
+    statusHeader: string;
+    actualHeader: string;
+    expectedHeader: string;
+    /** Ids of people on the roster, when roster-only mode applies. */
+    rosterIds: Set<string> | null;
     tableIndex: number; rowIndex: number;
   },
   masters: Masters, cfg: EngineConfig, createdEmployees: Employee[]
-): BuildOk | BuildFail {
+): BuildOk | BuildFail | BuildOutside {
   const problems: string[] = [];
 
   // --- Date (required) ---
@@ -164,7 +219,8 @@ function buildTaskRecord(
   // and writing it on every row would be redundant. Falling back to the sender
   // is only safe when the table never had an employee column, which the caller
   // determines from the header, not from this row being blank.
-  const rawEmp = cleanWhitespace(raw.employee) || ctx.senderEmployee;
+  const ownEmp = cleanWhitespace(raw.employee);
+  const rawEmp = ownEmp || ctx.senderEmployee;
   if (!rawEmp) {
     return {
       ok: false, reason: 'MISSING_REQUIRED_FIELD',
@@ -173,10 +229,15 @@ function buildTaskRecord(
   }
   const deptRaw = cleanWhitespace(raw.department);
   const deptFromRow = deptRaw ? lookupDepartment(deptRaw, masters) || titleIfNew(deptRaw) : '';
+  // In roster-only mode nobody is invented: a name the roster does not know is
+  // out of scope, not a new colleague.
   const emp = resolveEmployee(
     rawEmp, deptFromRow || ctx.departmentHint || cfg.defaultDepartment,
-    masters, cfg, createdEmployees
+    masters, ctx.rosterIds ? { ...cfg, autoCreateEmployees: false } : cfg, createdEmployees
   );
+  if (ctx.rosterIds && (!emp || emp.isNew || !ctx.rosterIds.has(emp.id))) {
+    return { ok: false, outsideRoster: emp?.name || rawEmp };
+  }
   if (!emp) {
     return {
       ok: false, reason: 'UNKNOWN_EMPLOYEE',
@@ -215,7 +276,11 @@ function buildTaskRecord(
   }
 
   // --- Task (required) ---
-  const rawTask = cleanWhitespace(raw.task);
+  // "What did I do?" is the work. When it is empty the row still names the
+  // work it was meant to be, under "What was I supposed to do today?".
+  const didTask = cleanWhitespace(raw.task);
+  const plannedTask = cleanWhitespace(raw.plannedTask);
+  const rawTask = didTask || plannedTask;
   if (!rawTask) return { ok: false, reason: 'MISSING_REQUIRED_FIELD', detail: 'Task is empty' };
   if (rawTask.length < cfg.minTaskLength) {
     return {
@@ -234,7 +299,7 @@ function buildTaskRecord(
   // --- Status (required) ---
   const rawStatus = cleanWhitespace(raw.status);
   if (!rawStatus) return { ok: false, reason: 'MISSING_REQUIRED_FIELD', detail: 'Status is empty' };
-  let status = normalizeStatus(rawStatus, masters);
+  let status = normalizeStatus(rawStatus, masters) || statusFromAnswer(rawStatus, ctx.statusHeader);
   let statusWorkKind = '';
 
   if (!status && statusMeansPlanned(rawStatus)) {
@@ -284,11 +349,12 @@ function buildTaskRecord(
     categoryName = cat.name;
     expected = cat.expectedDuration;
   }
-  const expectedFromDoc = parseHours(raw.expectedDuration);
+  const expectedFromDoc = durationInHours(raw.expectedDuration, ctx.expectedHeader);
   if (expectedFromDoc !== null) expected = expectedFromDoc;
 
   const dur = computeDuration(
-    date, startDate, startTime, completionDate, completionTime, parseHours(raw.actualDuration)
+    date, startDate, startTime, completionDate, completionTime,
+    durationInHours(raw.actualDuration, ctx.actualHeader)
   );
   if (dur.basis === 'Insufficient Data') {
     problems.push('No start/completion timestamps — duration cannot be measured');
@@ -329,7 +395,13 @@ function buildTaskRecord(
       sourceDocumentDate: ctx.receivedAt,
       dataQualityStatus: quality,
       dataQualityNotes: problems.join('; '),
-      notes: cleanWhitespace(raw.notes)
+      // The plan beside the outcome is what a summary needs to say whether the
+      // day went as intended, so it travels with the row.
+      notes: [
+        plannedTask && didTask && keyify(plannedTask) !== keyify(didTask)
+          ? `Planned: ${plannedTask}` : '',
+        cleanWhitespace(raw.notes)
+      ].filter(Boolean).join(' · ')
     }
   };
 }
@@ -369,7 +441,11 @@ export function ingestDocument(
   // 1. Candidate tables. Pre-parsed tables (an attachment) win outright.
   let tables = doc.tables?.length ? doc.tables : (doc.html ? extractTables(doc.html) : []);
   if (!tables.length) {
-    tables = extractPipeTables(doc.text || (doc.html ? tagText(doc.html) : ''));
+    const text = doc.text || (doc.html ? tagText(doc.html) : '');
+    // A range copied out of a spreadsheet is tab-separated; try that first,
+    // because a DWR's title line contains pipes of its own.
+    tables = extractTabTables(text);
+    if (!tables.length) tables = extractPipeTables(text);
   }
 
   // 2. Keep only tables that map to the schema
@@ -416,9 +492,23 @@ export function ingestDocument(
     : inferReportDate(
         { subject: doc.subject, body: doc.contextText, receivedAt: doc.receivedAt }, cfg);
 
-  // The sender as a person: "Ada Lovelace <a@x.com>" -> "Ada Lovelace",
-  // and a bare address falls back to its local part.
-  const senderName = senderDisplayName(doc.sender);
+  // The sender as a person. The roster is asked first, by address: a report
+  // sent from asha.rao@example.com is Asha Rao's whatever their mail client calls
+  // him. Otherwise "Ada Lovelace <a@x.com>" -> "Ada Lovelace", and a bare
+  // address falls back to its local part. A paste from the dashboard has no
+  // sender, and must not be filed under a colleague called "Dashboard".
+  const rosterBySender = addr
+    ? masters.employees.find(e => e.email && e.email.toLowerCase().trim() === addr)
+    : undefined;
+  const senderName = /@local$/.test(addr) ? ''
+    : (rosterBySender?.name || senderDisplayName(doc.sender));
+
+  // Roster-only mode, and only once there is a roster to be strict about:
+  // switching it on before anyone is listed must not throw away every report.
+  const rosterPeople = masters.employees.filter(e => e.onRoster);
+  const rosterIds = cfg.rosterOnly && rosterPeople.length
+    ? new Set(rosterPeople.map(e => e.id)) : null;
+  const outside = new Map<string, number>();
 
   // 4. Parse every report table
   const built: BuildOk[] = [];
@@ -427,26 +517,46 @@ export function ingestDocument(
 
   reportTables.forEach((rt, tIdx) => {
     const { rows } = rt.table;
+    const { mapping, banner } = rt.header;
+    const heading = (f: Field) =>
+      mapping[f] === undefined ? '' : rows[rt.header.headerRowIndex]?.[mapping[f] as number]?.text || '';
+
+    // What the table's own title line states outranks what the covering email
+    // implies: it is the report speaking about itself.
+    const tableDate = banner?.date
+      ? { date: banner.date, quote: `title row: ${banner.quote}` }
+      : dateEvidence ? { date: dateEvidence.date, quote: dateEvidence.quote } : null;
+    const tableDept = (banner?.department && lookupDepartment(banner.department, masters)) || '';
+    // Who wrote a table with no employee column: the person named on the
+    // Manual entry form, else the title line, else the sender.
+    const fallbackEmployee = 'employee' in mapping ? ''
+      : cleanWhitespace(doc.statedEmployee) || banner?.employee || senderName;
+
     for (let r = rt.header.headerRowIndex + 1; r < rows.length; r++) {
       if (rowsExtracted >= cfg.maxRowsPerDocument) break;
-      const raw = readRowFields(rows[r], rt.header.mapping);
-      if (isBlankRow(raw) || looksLikeTotalsRow(raw)) continue;
+      const raw = readRowFields(rows[r], mapping);
+      if (isBlankRow(raw) || looksLikeTotalsRow(raw) || isTemplateFiller(raw)) continue;
       rowsExtracted++;
       const res = buildTaskRecord(
         raw,
         { reportId, documentId: doc.documentId, receivedAt: doc.receivedAt,
-          departmentHint,
-          reportDate: dateEvidence?.date || '',
-          reportDateQuote: dateEvidence?.quote || '',
+          departmentHint: tableDept || departmentHint,
+          reportDate: tableDate?.date || '',
+          reportDateQuote: tableDate?.quote || '',
           extractionSource: doc.extractionSource || 'table',
           tableIndex: tIdx, rowIndex: r,
           workKind: workKindFor(rt.header, rt.table.rows),
-          // Only when this table has no employee column of its own.
-          senderEmployee: 'employee' in rt.header.mapping ? '' : senderName },
+          senderEmployee: fallbackEmployee,
+          statusHeader: heading('status'),
+          actualHeader: heading('actualDuration'),
+          expectedHeader: heading('expectedDuration'),
+          rosterIds },
         masters, cfg, createdEmployees
       );
       if (res.ok) built.push(res);
-      else rejected.push({
+      else if ('outsideRoster' in res) {
+        outside.set(res.outsideRoster, (outside.get(res.outsideRoster) || 0) + 1);
+      } else rejected.push({
         reportId, documentId: doc.documentId, tableIndex: tIdx, rowIndex: r,
         reason: res.reason, detail: res.detail, raw
       });
@@ -514,14 +624,24 @@ export function ingestDocument(
       : accepted.length === 0 && skippedIdempotent === 0 ? 'NO_DATA'
       : 'SUCCESS';
 
+  const outsideRoster = [...outside.entries()]
+    .map(([name, rows]) => ({ name, rows }))
+    .sort((a, b) => b.rows - a.rows || a.name.localeCompare(b.name));
+  const outsideNote = outsideRoster.length
+    ? `, ${outsideRoster.reduce((a, o) => a + o.rows, 0)} left out as not on the team roster ` +
+      `(${outsideRoster.slice(0, 5).map(o => o.name).join(', ')}` +
+      `${outsideRoster.length > 5 ? ', …' : ''})`
+    : '';
+
   return {
     reportId, status, department, departments, reportDate,
     tablesFound: reportTables.length, rowsExtracted,
     accepted, rejected, skippedIdempotent,
     newEmployees: createdEmployees,
-    message: rejected.length
+    message: (rejected.length
       ? `${accepted.length} imported, ${rejected.length} rejected, ${skippedIdempotent} already present`
-      : `${accepted.length} imported, ${skippedIdempotent} already present`
+      : `${accepted.length} imported, ${skippedIdempotent} already present`) + outsideNote,
+    ...(outsideRoster.length ? { outsideRoster } : {})
   };
 }
 

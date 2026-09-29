@@ -20,7 +20,8 @@
  * wrongly mapped one corrupts data silently.
  */
 import type { EngineConfig, Field, Masters } from './types';
-import { cleanWhitespace, normalizeStatus, parseDate } from './normalize';
+import { cleanWhitespace, keyify, normalizeStatus, parseDate } from './normalize';
+import { looksLikePersonName } from './person-name';
 import { statusIsAmbiguous, statusMeansPlanned } from './semantic-headers';
 
 /**
@@ -53,6 +54,26 @@ export interface ValueProfile {
  */
 const PERSON = /^[A-Z][a-z'’-]+(?:[ ,]+[A-Z][a-z'’.-]+){1,3}$/;
 
+/**
+ * A value that is a person: somebody the organisation already knows by that
+ * name, or a name-shaped value that does not name a piece of work. Shape alone
+ * let "Hr Meeting" and "Attendance Monitoring" through as colleagues.
+ */
+function isPerson(v: string, known: Set<string>): boolean {
+  if (known.has(keyify(v))) return true;
+  return PERSON.test(v) && looksLikePersonName(v);
+}
+
+function knownNames(masters: Masters): Set<string> {
+  const out = new Set<string>();
+  for (const e of masters.employees) {
+    out.add(keyify(e.name));
+    for (const a of e.aliases) if (a) out.add(keyify(a));
+  }
+  out.delete('');
+  return out;
+}
+
 export function profileColumn(
   values: string[], masters: Masters, cfg: EngineConfig
 ): ValueProfile {
@@ -60,11 +81,12 @@ export function profileColumn(
   const filled = cleaned.filter(Boolean);
   const distinct = new Set(filled.map(v => v.toLowerCase())).size;
 
+  const known = knownNames(masters);
   let dates = 0, statuses = 0, people = 0, numbers = 0, urls = 0, words = 0;
   for (const v of filled) {
     if (parseDate(v, cfg.dateOrder)) dates++;
     if (looksLikeStatus(v, masters)) statuses++;
-    if (PERSON.test(v)) people++;
+    if (isPerson(v, known)) people++;
     if (/^-?[\d.,%]+$/.test(v)) numbers++;
     if (/^https?:\/\//i.test(v)) urls++;
     words += v.split(/\s+/).length;

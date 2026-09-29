@@ -311,6 +311,44 @@ export function normalizeStatus(raw: unknown, masters: Masters): TaskStatus | nu
   return null;
 }
 
+/**
+ * Headings from the company's own Daily Work Report (DWR) template, built in so
+ * the format works without anyone editing the alias table:
+ *
+ *   Sr. No. | Company | Category | What was I supposed to do today? |
+ *   What did I do? | Did I do | Time taken (Minutes) | Comments / Links
+ *
+ * Phrased as questions, they defeat the word scoring below — "What did I do?"
+ * contains no word that names a task — so they are listed outright. Consulted
+ * after the configured aliases, which always win.
+ */
+const BUILT_IN_HEADERS: Record<string, Field> = {
+  'what did i do': 'task',
+  'what did i do today': 'task',
+  'what i did': 'task',
+  'what i did today': 'task',
+  'what have i done': 'task',
+  'what was i supposed to do today': 'plannedTask',
+  'what was i supposed to do': 'plannedTask',
+  'what i was supposed to do': 'plannedTask',
+  'what am i supposed to do today': 'plannedTask',
+  'supposed to do': 'plannedTask',
+  'did i do': 'status',
+  'did i do it': 'status',
+  'did you do': 'status',
+  'did you do it': 'status',
+  'time taken minutes': 'actualDuration',
+  'time taken in minutes': 'actualDuration',
+  'time taken mins': 'actualDuration',
+  'time taken min': 'actualDuration',
+  'time spent minutes': 'actualDuration',
+  'time spent in minutes': 'actualDuration',
+  'comments links': 'notes',
+  'comment links': 'notes',
+  'comments link': 'notes',
+  'remarks links': 'notes'
+};
+
 export function normalizeHeader(raw: unknown, masters: Masters): Field | null {
   const aliases = masters.headerAliases;
   const k = keyify(raw);
@@ -318,6 +356,8 @@ export function normalizeHeader(raw: unknown, masters: Masters): Field | null {
   if (aliases[k]) return aliases[k];
   const k2 = k.replace(/\s*\(.*?\)\s*/g, ' ').replace(/[*#:]/g, '').replace(/\s{2,}/g, ' ').trim();
   if (aliases[k2]) return aliases[k2];
+  if (BUILT_IN_HEADERS[k]) return BUILT_IN_HEADERS[k];
+  if (BUILT_IN_HEADERS[k2]) return BUILT_IN_HEADERS[k2];
   if (/^(s no|sr no|sl no|sno|srno|#)$/.test(k2)) return null;
 
   // Nothing configured matches. Read the heading for what it is about rather

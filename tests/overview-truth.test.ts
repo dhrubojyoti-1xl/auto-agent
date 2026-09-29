@@ -186,16 +186,18 @@ d('the Inbox shows the report, not the marketing', () => {
     expect(msgs[0].classification).toBe('DEPARTMENTAL_REPORT');
   });
 
-  it('puts what needs a person above what was ruled out', async () => {
+  // Reversed on 28-09-2026 at the company's request: only reports are shown.
+  // The newsletters used to be listed "so nothing looks hidden"; now nothing
+  // about them reaches the screen except how many there were.
+  it('lists the report and nothing else', async () => {
     const msgs = await q.getInboxMessages(UID, 15);
-    const review = msgs.findIndex((m: any) => m.classification === 'REVIEW_REQUIRED');
-    const ignored = msgs.findIndex((m: any) => m.classification === 'NON_REPORT');
-    expect(review).toBeLessThan(ignored);
+    expect(msgs.map((m: any) => m.subject)).toEqual(['Daily report']);
   });
 
-  it('still shows the newsletters, so nothing looks hidden', async () => {
-    const msgs = await q.getInboxMessages(UID, 15);
-    expect(msgs.filter((m: any) => m.classification === 'NON_REPORT').length).toBe(9);
+  it('counts the other messages without naming any of them', async () => {
+    // Nine newsletters, and a screenshot that could not be read — which may
+    // have been a report, so it is counted separately.
+    expect(await q.getOtherMessageCount(UID)).toEqual({ total: 10, unreadable: 1 });
   });
 });
 

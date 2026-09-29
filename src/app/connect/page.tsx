@@ -3,7 +3,8 @@ import Nav from '../nav';
 import { getSession } from '@/lib/auth';
 import { getUser } from '@/lib/users';
 import { listGmailAccounts, listSyncRuns } from '@/lib/accounts';
-import { getInboxMessages } from '@/lib/queries';
+import { getInboxMessages, getOtherMessageCount } from '@/lib/queries';
+import OtherMessagesNote from '../other-messages';
 import { getCoverage } from '@/lib/analytics';
 import { googleConfigured } from '@/lib/google-oauth';
 import ConnectControls from './controls';
@@ -37,12 +38,13 @@ export default async function ConnectPage({
   let schema: Awaited<ReturnType<typeof getSchemaStatus>> | null = null;
   let messages: Awaited<ReturnType<typeof getInboxMessages>> = [];
   let coverage: Awaited<ReturnType<typeof getCoverage>> | null = null;
+  let otherMessages = { total: 0, unreadable: 0 };
   let dbError = '';
   try {
-    [accounts, runs, schema, messages, coverage] = await Promise.all([
+    [accounts, runs, schema, messages, coverage, otherMessages] = await Promise.all([
       listGmailAccounts(session.userId), listSyncRuns(session.userId, 10),
       getSchemaStatus(), getInboxMessages(session.userId, 15),
-      getCoverage(session.userId)
+      getCoverage(session.userId), getOtherMessageCount(session.userId)
     ]);
   } catch (e) {
     dbError = safeErrorMessage(e);
@@ -192,11 +194,11 @@ export default async function ConnectPage({
 
         {coverage && coverage.messagesScanned > 0 && (
           <>
-            <h2>What the assistant made of each message</h2>
-            <p className="small muted">
-              The verdict, not the correspondence. This is not a mail client and does not
-              show message contents.
-            </p>
+            <h2>Reports received</h2>
+            <OtherMessagesNote {...otherMessages} />
+            {messages.length === 0 && (
+              <div className="card small muted">No reports have arrived yet.</div>
+            )}
             <div className="msg-list">
               {messages.map((m, i) => {
                 const kind = m.classification === 'DEPARTMENTAL_REPORT' ? 'report'

@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { resetDatabase } from './helpers';
+import { reportDocument, reportRejection } from '../src/lib/visibility';
 
 const DB = process.env.TEST_DATABASE_URL;
 const d = DB ? describe : describe.skip;
@@ -48,7 +49,12 @@ d('the export runs against the real schema', () => {
 
   it('every query the endpoint issues actually executes', async () => {
     for (const sql of selects) {
-      const runnable = sql.replace(/\$1/g, String(UID)).replace(/\$\{MAX_ROWS\}/g, '10');
+      // The reports-only filters are interpolated at run time; expand them the
+      // same way so the SQL executed here is the SQL the endpoint sends.
+      const runnable = sql
+        .replace(/\$\{reportDocument\('(\w+)'\)\}/g, (_m, a) => reportDocument(a))
+        .replace(/\$\{reportRejection\('(\w+)'\)\}/g, (_m, a) => reportRejection(a))
+        .replace(/\$1/g, String(UID)).replace(/\$\{MAX_ROWS\}/g, '10');
       await expect(db.query(runnable), sql.slice(0, 60)).resolves.toBeTruthy();
     }
   });

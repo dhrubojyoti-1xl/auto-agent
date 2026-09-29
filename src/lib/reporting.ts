@@ -19,6 +19,7 @@ import { addDays, monthStartOf, weekStartOf } from './core/normalize';
 import type { ReportStatus } from './core/report';
 import { renderReport } from './core/report';
 import { loadTasks, query } from './db';
+import { reportRejection } from './visibility';
 import { engineConfig } from './pipeline';
 
 export interface GeneratedReport {
@@ -81,8 +82,8 @@ export async function generateReport(
   const employees = buildEmployeeSummary(tasks, analysis, cfg);
 
   const rejections = await query<{ rejection_reason: string; claimed_date: string | null; logged_at: string }>(
-    `select rejection_reason, claimed_date, logged_at from data_quality
-     where owner_user_id = $1`, [ownerUserId]
+    `select rejection_reason, claimed_date, logged_at from data_quality dq
+     where owner_user_id = $1 and ${reportRejection('dq')}`, [ownerUserId]
   );
 
   const dataset = buildAiDataset(

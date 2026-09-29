@@ -9,17 +9,25 @@ type Preview = IngestResult & { rowsWritten?: number };
 export default function SubmitPage() {
   const [subject, setSubject] = useState('Daily Report');
   const [content, setContent] = useState('');
+  // A copy out of Google Sheets or Excel carries the sheet as an HTML table as
+  // well as plain text. The table keeps what the text loses — the merged DWR
+  // title row, links — so it is what gets sent, while the box shows the text.
+  const [pastedHtml, setPastedHtml] = useState('');
+  const [employee, setEmployee] = useState('');
+  const [date, setDate] = useState('');
   const [preview, setPreview] = useState<Preview | null>(null);
   const [committed, setCommitted] = useState<Preview | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+
+  const reset = () => { setPreview(null); setCommitted(null); };
 
   async function call(path: string) {
     setBusy(true); setError('');
     try {
       const res = await fetch(path, {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ subject, content })
+        body: JSON.stringify({ subject, content: pastedHtml || content, employee, date })
       });
       const body = await res.json();
       if (!res.ok) { setError(body.error || 'Request failed'); return null; }
@@ -36,8 +44,9 @@ export default function SubmitPage() {
       <main className="shell">
         <h1>Submit a report</h1>
         <p className="sub">
-          Paste the report table — HTML from an email, or a plain <code>a | b | c</code> table.
-          Nothing is saved until you confirm.
+          Select the report in Google Sheets or Excel — the DWR title row included — copy it,
+          and paste it below. A table copied from an email, or a plain{' '}
+          <code>a | b | c</code> table, works too. Nothing is saved until you confirm.
         </p>
 
         <div className="card">
@@ -45,9 +54,40 @@ export default function SubmitPage() {
           <input id="subject" type="text" value={subject} onChange={e => setSubject(e.target.value)} />
           <label htmlFor="content">Report content</label>
           <textarea id="content" value={content} placeholder={
+            'Paste the DWR here (Ctrl+V) — or type:\n' +
             'Date | Employee | Task | Status | Link\n' +
             '29 Aug 2026 | A. Lovelace | Update CRM | Completed | https://…'
-          } onChange={e => { setContent(e.target.value); setPreview(null); setCommitted(null); }} />
+          }
+            onPaste={e => {
+              const html = e.clipboardData.getData('text/html');
+              setPastedHtml(/<table[\s>]/i.test(html) ? html : '');
+              reset();
+            }}
+            onChange={e => {
+              // Typing over a paste means the text is now the report.
+              if (pastedHtml && e.nativeEvent instanceof InputEvent &&
+                  e.nativeEvent.inputType !== 'insertFromPaste') setPastedHtml('');
+              if (!e.target.value) setPastedHtml('');
+              setContent(e.target.value); reset();
+            }} />
+          {pastedHtml && (
+            <p className="small muted" style={{ margin: '.35rem 0 0' }}>
+              Pasted as a spreadsheet table — the title row and links are kept.
+            </p>
+          )}
+          <div className="row" style={{ marginTop: '.6rem', alignItems: 'flex-end' }}>
+            <div style={{ flex: '1 1 220px' }}>
+              <label htmlFor="employee">Employee <span className="muted">(optional)</span></label>
+              <input id="employee" type="text" value={employee} autoComplete="off"
+                     placeholder="Only if the report does not name anyone"
+                     onChange={e => { setEmployee(e.target.value); reset(); }} />
+            </div>
+            <div style={{ flex: '0 1 200px' }}>
+              <label htmlFor="date">Report date <span className="muted">(optional)</span></label>
+              <input id="date" type="date" value={date}
+                     onChange={e => { setDate(e.target.value); reset(); }} />
+            </div>
+          </div>
           <div className="row" style={{ marginTop: '.9rem' }}>
             <button disabled={busy || !content.trim()}
                     onClick={async () => { setCommitted(null); setPreview(await call('/api/preview')); }}>
@@ -101,6 +141,15 @@ function ResultView({ result }: { result: Preview }) {
 
       {result.status === 'NO_DATA' && (
         <div className="banner warn" style={{ marginTop: '1rem' }}>{result.message}</div>
+      )}
+
+      {!!result.outsideRoster?.length && (
+        <div className="banner" style={{ marginTop: '1rem' }}>
+          <strong>Left out — not on the team roster:</strong>{' '}
+          {result.outsideRoster.map(o => `${o.name} (${o.rows})`).join(', ')}.
+          Only people on the <Link href="/roster">Team roster</Link> are imported.
+          Add someone there if they should be included.
+        </div>
       )}
 
       {result.accepted.length > 0 && (

@@ -2,8 +2,10 @@ import { redirect } from 'next/navigation';
 import Nav from '../nav';
 import { getSession } from '@/lib/auth';
 import { formatDay, formatStamp } from '@/lib/format-date';
+import OtherMessagesNote from '../other-messages';
 import {
-  getAutoCreatedEmployees, getDocuments, getMessageOutcomes, getRejections
+  getAutoCreatedEmployees, getDocuments, getMessageOutcomes, getOtherMessageCount,
+  getRejections
 } from '@/lib/queries';
 
 export const dynamic = 'force-dynamic';
@@ -11,16 +13,16 @@ export const dynamic = 'force-dynamic';
 export default async function QualityPage() {
   const session = await getSession();
   if (!session) redirect('/login');
-  const [rejections, documents, invented, outcomes] = await Promise.all([
+  const [rejections, documents, invented, outcomes, otherMessages] = await Promise.all([
     getRejections(session.userId), getDocuments(session.userId, 30),
-    getAutoCreatedEmployees(session.userId), getMessageOutcomes(session.userId, 50)
+    getAutoCreatedEmployees(session.userId), getMessageOutcomes(session.userId, 50),
+    getOtherMessageCount(session.userId)
   ]);
 
   // A decision the assistant made and finished with, versus something it could
   // not finish. Only the second needs anyone's attention.
   const NEEDS_A_PERSON = new Set(['REVIEW_REQUIRED', 'UNSUPPORTED_FORMAT', 'POSSIBLE_REPORT']);
   const needsReview = outcomes.filter(o => NEEDS_A_PERSON.has(o.classification));
-  const settled = outcomes.filter(o => !NEEDS_A_PERSON.has(o.classification));
   const LABEL: Record<string, string> = {
     REVIEW_REQUIRED: 'Needs a look',
     UNSUPPORTED_FORMAT: 'Format not readable',
@@ -84,15 +86,15 @@ export default async function QualityPage() {
           </div>
         )}
 
-        <h2>Messages that need a person</h2>
+        <h2>Reports that need a person</h2>
         {needsReview.length === 0 ? (
           <div className="card small muted">
-            Nothing is waiting. Every message was either processed or decided against.
+            Nothing is waiting. Every report that arrived was processed.
           </div>
         ) : (
           <>
             <p className="small muted">
-              Something in these messages looked like a report and could not be read.
+              These were recognised as reports and could not be fully read.
               Each says what happened and what would fix it.
             </p>
             <div className="table-wrap">
@@ -119,47 +121,9 @@ export default async function QualityPage() {
           </>
         )}
 
-        <h2>Messages decided against</h2>
-        {settled.length === 0 ? (
-          <div className="card small muted">No messages have been ruled out yet.</div>
-        ) : (
-          <>
-            <p className="small muted">
-              Read, judged not to be reports, and not looked at again. Shown so that a
-              report ruled out by mistake is findable rather than invisible.
-            </p>
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr><th>Received</th><th>From</th><th>Subject</th><th>Why</th>
-                      <th className="num">Score</th></tr>
-                </thead>
-                <tbody>
-                  {settled.slice(0, 25).map((o, i) => (
-                    <tr key={i}>
-                      <td className="small">{formatDay(o.receivedAt)}</td>
-                      <td className="small">{o.sender.slice(0, 40)}</td>
-                      <td className="small">{o.subject.slice(0, 60)}</td>
-                      <td className="small muted">
-                        {o.evidence}
-                        {/* The signals that decided it, so a report ignored by
-                            mistake can be argued with rather than guessed at. */}
-                        {o.prefilterSignals && (
-                          <div className="small muted" style={{ marginTop: '.2rem' }}>
-                            {o.prefilterSignals}
-                          </div>
-                        )}
-                      </td>
-                      <td className="num small muted">
-                        {o.prefilterScore === null ? '—' : o.prefilterScore}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
+        {/* Only reports are ever shown. Every other message is checked to find
+            the reports among them, and is reduced here to a number. */}
+        <div style={{ marginTop: '1rem' }}><OtherMessagesNote {...otherMessages} /></div>
 
         <h2>People the assistant assumed</h2>
         {invented.length === 0 ? (
