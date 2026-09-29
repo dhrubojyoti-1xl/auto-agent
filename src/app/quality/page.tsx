@@ -3,6 +3,7 @@ import Nav from '../nav';
 import { getSession } from '@/lib/auth';
 import { formatDay, formatStamp } from '@/lib/format-date';
 import OtherMessagesNote from '../other-messages';
+import { looksLikePersonName } from '@/lib/core/person-name';
 import {
   getAutoCreatedEmployees, getDocuments, getMessageOutcomes, getOtherMessageCount,
   getRejections
@@ -18,6 +19,15 @@ export default async function QualityPage() {
     getAutoCreatedEmployees(session.userId), getMessageOutcomes(session.userId, 50),
     getOtherMessageCount(session.userId)
   ]);
+
+  // An earlier importer recorded task titles, places and lists of names as
+  // people ("Attendance Monitoring", "Dubai", "Admin Panel"). The records are
+  // left as they are; only names that could be a person are listed, and the
+  // rest are counted, because five hundred task titles bury the handful of
+  // real people a manager needs to check.
+  const assumedPeople = invented.filter(e => looksLikePersonName(e.name));
+  const notPeople = invented.filter(e => !looksLikePersonName(e.name));
+  const notPeopleTasks = notPeople.reduce((a, e) => a + e.tasks, 0);
 
   // A decision the assistant made and finished with, versus something it could
   // not finish. Only the second needs anyone's attention.
@@ -126,9 +136,23 @@ export default async function QualityPage() {
         <div style={{ marginTop: '1rem' }}><OtherMessagesNote {...otherMessages} /></div>
 
         <h2>People the assistant assumed</h2>
-        {invented.length === 0 ? (
+        {notPeople.length > 0 && (
+          <p className="small muted">
+            {notPeople.length} more record{notPeople.length === 1 ? ' is' : 's are'} not
+            {notPeople.length === 1 ? ' a person' : ' people'} &mdash; task titles, places and
+            lists of names that an earlier version filed as employees
+            {notPeopleTasks > 0
+              ? ` (${notPeopleTasks} task${notPeopleTasks === 1 ? '' : 's'} in this account are filed under them)`
+              : ' (no tasks in this account are filed under them)'}.
+            They are not shown. Importing the <a href="/roster">Team roster</a> puts the real
+            people on record.
+          </p>
+        )}
+        {assumedPeople.length === 0 ? (
           <div className="card small muted">
-            Every name in every report matched someone already on the roster.
+            {notPeople.length
+              ? 'No one else was assumed.'
+              : 'Every name in every report matched someone already on the roster.'}
           </div>
         ) : (
           <>
@@ -147,7 +171,7 @@ export default async function QualityPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {invented.map(e => (
+                  {assumedPeople.map(e => (
                     <tr key={e.id}>
                       <td>{e.name}</td>
                       <td><span className="pill warn">{e.department || 'none'}</span></td>

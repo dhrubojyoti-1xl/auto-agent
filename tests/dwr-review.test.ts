@@ -151,6 +151,17 @@ describe('task titles are never employees', () => {
   const PEOPLE = ['Asha Rao', 'Vikram Nair', 'Karan Mehta', 'Imran Shaikh', 'Leela S',
     'Raghavan KP', 'Lakshmi Devi Reddy', 'Subhajit Chattopadhyay', 'Asha', "D'Souza"];
 
+  it('recognises what the live Data quality page listed as people as not people', () => {
+    // Records an earlier importer created, as they appeared on 29-09-2026.
+    for (const t of ['Admin Panel', 'Influencer Panel', 'Dubai', 'New Delhi', 'Greater Noida',
+      'India Today Group', 'Human Resource', 'Travel Reimbursement', 'Welcome Kit',
+      'Warning Letter', 'Cv Database', 'Organisational Chart', 'Welfare Committee',
+      'Doj Confirmation', 'Birthday Posters', 'Probation Tracking', 'Google Sheets', 'Na',
+      'Jainam & Jivika Jain', 'Content Team', 'Response Submiited', 'Gmail Account']) {
+      expect(looksLikePersonName(t), t).toBe(false);
+    }
+  });
+
   it('recognises the review screenshots as work, and the roster as people', () => {
     for (const t of TITLES) expect(looksLikePersonName(t), t).toBe(false);
     for (const p of PEOPLE) expect(looksLikePersonName(p), p).toBe(true);
