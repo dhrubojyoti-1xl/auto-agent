@@ -1,17 +1,29 @@
 import { redirect } from 'next/navigation';
 import Nav from '../nav';
 import { getSession } from '@/lib/auth';
-import { getLatestReport } from '@/lib/queries';
+import { getDepartmentDay, getLatestReport } from '@/lib/queries';
+import {
+  departmentDayAsText, silentDepartments, summariseDepartmentDay
+} from '@/lib/core/department-day';
 import ReportControls from './controls';
+import DepartmentDaySection from './department-day';
 import { formatStamp } from '@/lib/format-date';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ReportPage() {
+export default async function ReportPage({
+  searchParams
+}: { searchParams: Promise<Record<string, string | undefined>> }) {
   const session = await getSession();
   if (!session) redirect('/login');
-  const latest = await getLatestReport(session.userId);
+  const sp = await searchParams;
+  const [latest, day] = await Promise.all([
+    getLatestReport(session.userId),
+    getDepartmentDay(session.userId, sp.date)
+  ]);
   const aiConfigured = !!process.env.ANTHROPIC_API_KEY;
+  const days = day.date ? summariseDepartmentDay(day.rows, day.roster, day.isPerson) : [];
+  const silent = day.date ? silentDepartments(day.roster, days) : [];
 
   return (
     <>
@@ -23,6 +35,11 @@ export default async function ReportPage() {
           only — and anything it invents is removed before you see it.
         </p>
 
+        <DepartmentDaySection date={day.date} available={day.available} days={days}
+          silent={silent}
+          text={day.date ? departmentDayAsText(day.date, days, silent) : ''} />
+
+        <h2>Period report</h2>
         <div className={'banner ' + (aiConfigured ? 'ok' : '')}>
           {aiConfigured
             ? 'AI commentary is available. Generating with AI adds interpretation; ' +

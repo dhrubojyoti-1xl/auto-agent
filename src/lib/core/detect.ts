@@ -16,7 +16,7 @@
  * titled "hi" from an unknown address still counts if it contains the table.
  */
 import type { EngineConfig, Masters, Table } from './types';
-import { extractPipeTables, extractTables, mapHeaderRow } from './html-table';
+import { extractPipeTables, extractTabTables, extractTables, mapHeaderRow } from './html-table';
 
 /**
  * Bumped whenever this module learns to recognise something it previously
@@ -81,6 +81,7 @@ export function detectInBody(
   html: string, text: string, masters: Masters, cfg: EngineConfig
 ): DetectionSignal {
   let tables = html ? extractTables(html) : [];
+  if (!tables.length) tables = extractTabTables(text || '');
   if (!tables.length) tables = extractPipeTables(text || '');
 
   for (let i = 0; i < tables.length; i++) {

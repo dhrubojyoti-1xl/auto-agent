@@ -10,6 +10,7 @@
  * one place, and when it changes it changes everywhere at once.
  */
 import { query } from './db';
+import { reportDocument, reportRejection } from './visibility';
 
 /**
  * What happened to the mail. These names are the vocabulary the interface uses;
@@ -182,12 +183,12 @@ export async function getAttention(ownerUserId: number): Promise<AttentionItem[]
 
   const [quality] = await query<Record<string, number>>(
     `select
-       (select count(*)::int from data_quality where owner_user_id = $1
-          and resolution_status = 'Open')                                  as open_rows,
-       (select count(*)::int from documents where owner_user_id = $1
-          and classification = 'REVIEW_REQUIRED')                          as review_msgs,
-       (select count(*)::int from documents where owner_user_id = $1
-          and classification = 'UNSUPPORTED_FORMAT')                       as unsupported,
+       (select count(*)::int from data_quality dq where owner_user_id = $1
+          and resolution_status = 'Open' and ${reportRejection('dq')})     as open_rows,
+       (select count(*)::int from documents d where owner_user_id = $1
+          and classification = 'REVIEW_REQUIRED' and ${reportDocument('d')}) as review_msgs,
+       (select count(*)::int from documents d where owner_user_id = $1
+          and classification = 'UNSUPPORTED_FORMAT' and ${reportDocument('d')}) as unsupported,
        (select count(*)::int from tasks where owner_user_id = $1
           and work_kind <> 'PLANNED' and slow_task_flag = 'TRUE')          as slow,
        (select count(*)::int from tasks where owner_user_id = $1

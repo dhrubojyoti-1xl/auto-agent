@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { query } from '@/lib/db';
+import { databaseUrl, query } from '@/lib/db';
 import { LIMITS, rateLimit } from '@/lib/rate-limit';
 import { safeErrorMessage } from '@/lib/safe-error';
 
@@ -30,7 +30,7 @@ const VIEWS = ['bi_tasks', 'bi_daily_by_department', 'bi_messages'] as const;
 function connectionDetails(): {
   host: string; port: string; database: string; user: string
 } | null {
-  const url = process.env.DATABASE_URL;
+  const url = databaseUrl();
   if (!url) return null;
   try {
     const u = new URL(url);

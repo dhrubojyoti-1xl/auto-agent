@@ -23,7 +23,7 @@ export default async function SlowPage(
   const [rows, kpis, options] = await Promise.all([
     getSlowTasks(session.userId, { department, employee, from, to, search }),
     getKpis(session.userId),
-    getFilterOptions(session.userId)
+    getFilterOptions(session.userId, { department })
   ]);
   return (
     <>

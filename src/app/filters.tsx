@@ -49,7 +49,7 @@ export default function Filters({
     <div className="filters">
       <div className="f">
         <label htmlFor="dept">Department</label>
-        <select id="dept" value={department ?? 'all'} onChange={e => go({ department: e.target.value })}>
+        <select id="dept" value={department ?? 'all'} onChange={e => go({ department: e.target.value, employee: '' })}>
           <option value="all">All departments</option>
           {departments.map(d => <option key={d} value={d}>{d}</option>)}
         </select>
@@ -58,7 +58,9 @@ export default function Filters({
         <label htmlFor="emp">Employee</label>
         <select id="emp" value={employee ?? 'all'} onChange={e => go({ employee: e.target.value })}>
           <option value="all">All employees</option>
-          {employees.map(e => <option key={e} value={e}>{e}</option>)}
+          {/* Keep a chosen person selectable even if the list no longer offers them. */}
+          {(employee && !employees.includes(employee) ? [employee, ...employees] : employees)
+            .map(e => <option key={e} value={e}>{e}</option>)}
         </select>
       </div>
       <div className="f">

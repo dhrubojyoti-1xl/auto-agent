@@ -2,9 +2,10 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import Nav from '../nav';
 import { getSession } from '@/lib/auth';
-import { BarChart, DonutChart, LineChart, RankChart } from '../charts/charts';
+import { BarChart, DataTable, DonutChart, LineChart, RankChart } from '../charts/charts';
+import ChartSwitch from '../charts/switch';
 import {
-  getDepartmentBreakdown, getEmployeeActivity, getFilterOptions, getKpis, getPeriodSeries,
+  getDepartmentBreakdown, getEmployeeActivityPanel, getFilterOptions, getKpis, getPeriodSeries,
   getRepeatGroups, getSlowTaskChart, getStatusDistribution, type Grain
 } from '@/lib/queries';
 import { compareCounts, compareRates, getAttention, getCoverage } from '@/lib/analytics';
@@ -74,12 +75,13 @@ export default async function ManagementPage({
   const windowFrom = from || series[0]?.period;
   const scope = { department, employee, from: windowFrom, to };
 
-  const [depts, status, employees, options, slow, repeats, kpis, coverage, attention] =
+  const [depts, status, activity, options, slow, repeats, kpis, coverage, attention] =
     await Promise.all([
       getDepartmentBreakdown(uid, { employee, from: windowFrom, to }),
       getStatusDistribution(uid, scope),
-      getEmployeeActivity(uid, { ...scope, limit: 10 }),
-      getFilterOptions(uid),
+      getEmployeeActivityPanel(uid, { ...scope, limit: 10 }),
+      // With a department chosen, the Employee list offers only its people.
+      getFilterOptions(uid, { department }),
       getSlowTaskChart(uid, { ...scope, limit: 8 }),
       getRepeatGroups(uid, scope),
       getKpis(uid),
@@ -87,6 +89,7 @@ export default async function ManagementPage({
       getAttention(uid)
     ]);
 
+  const employees = activity.rows;
   const latest = series[series.length - 1];
   const previous = series[series.length - 2];
   const totals = series.reduce((a, p) => ({
@@ -265,41 +268,115 @@ export default async function ManagementPage({
             <h2>Departments</h2>
             <div className="chart-grid">
               <div className="chart-card">
-                <h3>Task volume by department</h3>
-                <p className="cap">Completed and outstanding side by side.</p>
-                <BarChart rows={depts.map(d => ({
-                  label: d.department,
-                  values: [
-                    { name: 'Completed', value: d.completed },
-                    { name: 'Pending', value: d.pending + d.inProgress + d.blocked }
-                  ]
-                }))} stacked />
+                {(() => {
+                  const volume = depts.map(d => ({
+                    label: d.department,
+                    values: [
+                      { name: 'Completed', value: d.completed },
+                      { name: 'Pending', value: d.pending + d.inProgress + d.blocked }
+                    ]
+                  }));
+                  return (
+                    <ChartSwitch id="dept-volume" title="Task volume by department"
+                      caption="Completed and outstanding side by side."
+                      views={[
+                        { key: 'stacked', label: 'Stacked bars', node: <BarChart rows={volume} stacked /> },
+                        { key: 'grouped', label: 'Grouped bars', node: <BarChart rows={volume} /> },
+                        { key: 'horizontal', label: 'Horizontal bars', node: (
+                          <RankChart rows={depts.map(d => ({
+                            label: d.department, value: d.total,
+                            note: `· ${d.completed} completed`
+                          }))} />) },
+                        { key: 'table', label: 'Table', node: (
+                          <DataTable
+                            columns={[{ label: 'Department' }, { label: 'Tasks', num: true },
+                                      { label: 'Completed', num: true }, { label: 'Outstanding', num: true }]}
+                            rows={depts.map(d => [d.department, d.total, d.completed,
+                                                  d.pending + d.inProgress + d.blocked])} />) }
+                      ]} />
+                  );
+                })()}
               </div>
 
               <div className="chart-card">
-                <h3>Completion rate by department</h3>
-                <p className="cap">Computed from summed counts, never averaged across departments.</p>
-                <BarChart suffix="%" rows={depts.map(d => ({
-                  label: d.department,
-                  values: [{ name: 'Completion rate', value: d.completionRate }]
-                }))} />
+                <ChartSwitch id="dept-rate" title="Completion rate by department"
+                  caption="Computed from summed counts, never averaged across departments."
+                  views={[
+                    { key: 'bars', label: 'Bars', node: (
+                      <BarChart suffix="%" rows={depts.map(d => ({
+                        label: d.department,
+                        values: [{ name: 'Completion rate', value: d.completionRate }]
+                      }))} />) },
+                    { key: 'horizontal', label: 'Horizontal bars', node: (
+                      <RankChart suffix="%" max={100} rows={depts.map(d => ({
+                        label: d.department, value: d.completionRate,
+                        note: `· ${d.completed} of ${d.total}`
+                      }))} />) },
+                    { key: 'table', label: 'Table', node: (
+                      <DataTable
+                        columns={[{ label: 'Department' }, { label: 'Completion', num: true },
+                                  { label: 'Completed', num: true }, { label: 'Tasks', num: true }]}
+                        rows={depts.map(d => [d.department, `${d.completionRate}%`, d.completed, d.total])} />) }
+                  ]} />
               </div>
 
               <div className="chart-card">
-                <h3>Status distribution</h3>
-                <p className="cap">Every task in range, by status.</p>
-                <DonutChart slices={status} />
+                <ChartSwitch id="status-mix" title="Status distribution"
+                  caption="Every task in range, by status."
+                  views={[
+                    { key: 'donut', label: 'Donut', node: <DonutChart slices={status} /> },
+                    { key: 'bars', label: 'Bars', node: (
+                      <BarChart rows={status.map(s => ({
+                        label: s.name, values: [{ name: 'Tasks', value: s.value }]
+                      }))} />) },
+                    { key: 'table', label: 'Table', node: (() => {
+                      const all = status.reduce((a, s) => a + s.value, 0);
+                      return (
+                        <DataTable columns={[{ label: 'Status' }, { label: 'Tasks', num: true },
+                                             { label: 'Share', num: true }]}
+                          rows={status.map(s => [s.name, s.value,
+                            `${all ? Math.round((1000 * s.value) / all) / 10 : 0}%`])} />
+                      );
+                    })() }
+                  ]} />
               </div>
 
               <div className="chart-card">
-                <h3>Employee activity</h3>
-                <p className="cap">
-                  Reported activity, not productivity — task counts say nothing about complexity.
-                </p>
-                <RankChart rows={employees.map(e => ({
-                  label: e.employee, value: e.total,
-                  note: `· ${e.completionRate}% done`
-                }))} />
+                <ChartSwitch id="employee-activity" title="Employee activity"
+                  caption="Reported activity, not productivity — task counts say nothing about complexity."
+                  views={[
+                    { key: 'horizontal', label: 'Horizontal bars', node: (
+                      <RankChart rows={employees.map(e => ({
+                        label: e.employee, value: e.total,
+                        note: `· ${e.completionRate}% done`
+                      }))} />) },
+                    { key: 'bars', label: 'Vertical bars', node: (
+                      <BarChart stacked rows={employees.map(e => ({
+                        label: e.employee,
+                        values: [{ name: 'Completed', value: e.completed },
+                                 { name: 'Other', value: e.total - e.completed }]
+                      }))} />) },
+                    { key: 'table', label: 'Table', node: (
+                      <DataTable
+                        columns={[{ label: 'Employee' }, { label: 'Department' },
+                                  { label: 'Tasks', num: true }, { label: 'Completed', num: true },
+                                  { label: 'Days', num: true }]}
+                        rows={employees.map(e => [e.employee, e.department, e.total,
+                                                  e.completed, e.days])} />) }
+                  ]} />
+                {/* Older imports filed some task titles as names. They are left
+                    exactly as imported and still count in every department
+                    total; they are only kept out of a list of people. */}
+                {activity.hiddenNames > 0 && (
+                  <p className="chart-note">
+                    {activity.hiddenTasks} task{activity.hiddenTasks === 1 ? '' : 's'} under{' '}
+                    {activity.hiddenNames} name{activity.hiddenNames === 1 ? '' : 's'} that
+                    {activity.hiddenNames === 1 ? ' is' : ' are'} not a person
+                    (e.g. &ldquo;{activity.hiddenExamples[0]}&rdquo;) are counted in the
+                    department totals but not listed here. Add people to the{' '}
+                    <Link href="/roster">Team roster</Link> to be sure they always appear.
+                  </p>
+                )}
               </div>
             </div>
 

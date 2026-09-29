@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
+import { reportDocument, reportRejection } from '@/lib/visibility';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -65,12 +66,14 @@ export async function GET(req: Request) {
   const [rejections, documents, employees, departments, categories, accounts] = await Promise.all([
     query(`select report_id, document_id, table_index, row_index, rejection_reason,
                   rejection_detail, raw_row, claimed_date, logged_at, resolution_status
-           from data_quality where owner_user_id = $1 order by logged_at limit ${MAX_ROWS}`, [uid]),
+           from data_quality dq where owner_user_id = $1 and ${reportRejection('dq')}
+           order by logged_at limit ${MAX_ROWS}`, [uid]),
     query(`select report_id, document_id, source, subject, sender, sender_domain,
                   department, report_date, received_at, processing_status, tables_found,
                   rows_extracted, rows_inserted, rows_skipped_idempotent, rows_rejected,
                   error_message, processed_at, gmail_message_id
-           from documents where owner_user_id = $1 order by processed_at limit ${MAX_ROWS}`, [uid]),
+           from documents d where owner_user_id = $1 and ${reportDocument('d')}
+           order by processed_at limit ${MAX_ROWS}`, [uid]),
     query(`select employee_id, employee_name, name_aliases, department, active,
                   auto_created, joining_date, role, email from employees`),
     query(`select department_id, department_name, name_aliases, manager, manager_email,

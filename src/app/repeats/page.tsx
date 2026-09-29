@@ -29,7 +29,7 @@ export default async function RepeatsPage(
 
   const [groups, options] = await Promise.all([
     getRepeatGroups(session.userId, scope),
-    getFilterOptions(session.userId)
+    getFilterOptions(session.userId, { department })
   ]);
   const filtered = !!(department || employee || from || to || search);
   return (

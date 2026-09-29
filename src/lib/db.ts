@@ -26,7 +26,7 @@ export function getPool(): Pool {
   // very quiet way to stop running assertions. Closing now clears the handle
   // (see below), so the next caller simply gets a new pool.
   if (pool) return pool;
-  const connectionString = process.env.DATABASE_URL;
+  const connectionString = databaseUrl();
   if (!connectionString) {
     throw new Error(
       'DATABASE_URL is not set. Use the Supabase connection pooler string ' +
@@ -75,6 +75,18 @@ export function getPool(): Pool {
 
 let warnedAboutDirect = false;
 
+/**
+ * The connection string, from DATABASE_URL or, failing that, POSTGRES_URL.
+ *
+ * Connecting Supabase from its own dashboard (Integrations -> Vercel) writes
+ * POSTGRES_URL — the transaction pooler — and never DATABASE_URL. Reading only
+ * the one name made a correctly connected database look like no database at
+ * all: the health check said "error" while both dashboards showed the link.
+ */
+export function databaseUrl(): string {
+  return process.env.DATABASE_URL || process.env.POSTGRES_URL || '';
+}
+
 /** True for Supabase's direct endpoint or any plain 5432 connection. */
 export function isDirectConnection(connectionString: string): boolean {
   if (/pooler\.supabase\.com/i.test(connectionString)) return false;
@@ -88,7 +100,7 @@ export function hostOf(connectionString: string): string {
 
 /** For /api/health: which style is configured, without revealing credentials. */
 export function connectionStyle(): 'pooler' | 'direct' | 'unknown' {
-  const cs = process.env.DATABASE_URL;
+  const cs = databaseUrl();
   if (!cs) return 'unknown';
   return isDirectConnection(cs) ? 'direct' : 'pooler';
 }
@@ -109,8 +121,9 @@ import type { Category, Department, Employee, Masters, Field } from './core/type
 export async function loadMasters(): Promise<Masters> {
   const [employees, departments, categories, statusAliases, headerAliases] = await Promise.all([
     query<{ employee_id: string; employee_name: string; name_aliases: string[];
-            department: string | null; active: boolean }>(
-      'select employee_id, employee_name, name_aliases, department, active from employees'),
+            department: string | null; active: boolean; email: string | null;
+            auto_created: boolean | null }>(
+      'select employee_id, employee_name, name_aliases, department, active, email, auto_created from employees'),
     query<{ department_id: string; department_name: string; name_aliases: string[];
             sender_domains: string[] }>(
       'select department_id, department_name, name_aliases, sender_domains from departments where active'),
@@ -124,7 +137,10 @@ export async function loadMasters(): Promise<Masters> {
   return {
     employees: employees.map<Employee>(e => ({
       id: e.employee_id, name: e.employee_name, aliases: e.name_aliases || [],
-      department: e.department || '', active: e.active
+      department: e.department || '', active: e.active,
+      email: e.email || undefined,
+      // Stated by the organisation, not guessed from a report.
+      onRoster: e.active && e.auto_created === false
     })),
     departments: departments.map<Department>(d => ({
       id: d.department_id, name: d.department_name,

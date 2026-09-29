@@ -278,6 +278,35 @@ export function DonutChart({
 }
 
 /* ------------------------------------------------------------------ */
+/* Table — the same figures, for reading exact values                  */
+/* ------------------------------------------------------------------ */
+export function DataTable({
+  columns, rows, empty = 'Nothing to show yet'
+}: {
+  columns: { label: string; num?: boolean }[];
+  rows: (string | number)[][];
+  empty?: string;
+}) {
+  if (!rows.length) return <EmptyState label={empty} height={140} />;
+  return (
+    <div className="chart-table-wrap">
+      <table className="chart-table">
+        <thead>
+          <tr>{columns.map(c => <th key={c.label} className={c.num ? 'num' : ''}>{c.label}</th>)}</tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i}>
+              {r.map((v, j) => <td key={j} className={columns[j]?.num ? 'num' : ''}>{v}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Horizontal bars — rankings (employees, slow tasks)                  */
 /* ------------------------------------------------------------------ */
 export function RankChart({

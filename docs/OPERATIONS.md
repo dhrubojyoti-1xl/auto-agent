@@ -52,18 +52,58 @@ says so, whatever the subject line, the file type, or the column names.
 | Column names | read for meaning: "Work Done Today", "Staff Member", "Current State", "Reporting Dt", "Emp Nm", and the same words in Spanish, German or French |
 | Column order | irrelevant |
 | Structure | title rows, two-row headers, blank rows, summary rows and several tables in one message are all handled |
-| Employees | from an employee column, or from the sender when the report has none |
+| Employees | from an employee column, the DWR title line ("Emp Name: …"), the roster entry whose email sent the report, or the sender's name &mdash; in that order |
 | Departments | from a column, the sender's domain, or the employee roster &mdash; never guessed into a default |
 | Work streams | yesterday's work, today's work and tomorrow's plan are kept apart; plans never count as work done |
 
-Every message ends with one of four outcomes, visible on **Data quality**:
+### The DWR format
 
-| Outcome | Meaning |
+The company's Daily Work Report sheet is read as it is, with no changes to the
+template:
+
+| Sheet | Read as |
 |---|---|
-| Processed | became tasks |
-| Not a report | read, judged, and finished with &mdash; a newsletter, an invoice, an unrelated spreadsheet |
-| Format not readable | a PDF or Word document; send a spreadsheet, a table in the email, or a Google Sheet link |
-| Needs a look | something here is a report and could not be read &mdash; a screenshot, an unshared sheet, a corrupt file |
+| `DWR: 001 \| Emp Name: … \| Designation \| Date: … \| Day: …` | the employee and the date for every row |
+| What did I do? | the task |
+| What was I supposed to do today? | the plan; used as the task only when "What did I do?" is empty, and kept in the notes otherwise |
+| Did I do | the status: All / Yes &rarr; Completed, Partial &rarr; In Progress, No / None &rarr; Pending |
+| Time taken (Minutes) | the duration, converted to hours |
+| Category, Comments / Links | category, and notes plus the link |
+
+The template's unused lines ("Adhoc" and "All" pre-filled, nothing written) are
+skipped rather than reported as errors. The same sheet can be emailed as a
+table, attached, shared as a link, or copied and pasted into **Manual entry**.
+
+A standard subject line helps people find reports in their own mailbox, though
+the app does not need one: `DWR | <Department> | <Employee name> | <DD-MM-YYYY>`.
+
+### Only reports are shown
+
+The assistant checks every message to find the reports, but the app shows
+reports and nothing else: no other email's subject, sender or content appears on
+any page, in the export, or in the `bi_messages` view for Looker Studio. The
+Inbox and Data quality pages say only how many other messages were checked, and
+how many of those carried a PDF, a picture or a private sheet that could not be
+opened &mdash; so a DWR sent the wrong way is still noticed.
+
+| Shown | Meaning |
+|---|---|
+| Processed | a report that became tasks |
+| Needs a look | a report that could not be fully read &mdash; every row rejected, or a report detected in a picture |
+| (a count only) | everything else: newsletters, invoices, personal mail, unreadable attachments |
+
+The Looker Studio view is narrowed by `supabase/migrations/015_bi_messages_reports_only.sql`.
+It changes no data; run it with the other migrations (Inbox &rarr; apply migrations,
+or `scripts/finish-deploy.sh`).
+
+### Leaving a team out (`ROSTER_ONLY`)
+
+With `ROSTER_ONLY=true`, only people on the **Team roster** are imported. Anyone
+else &mdash; the Dubai team, a supplier who replies to a report &mdash; is left out
+without appearing as an error, and the import says who was left out. Until a
+roster exists the setting does nothing, so turning it on early cannot discard
+every report. Rows already imported are not changed; lists of people on the
+dashboard follow the roster too.
 
 Nothing is skipped in silence. A screenshot of a table is *not* read
 automatically: guessing figures from pixels is how wrong numbers enter a

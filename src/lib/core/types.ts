@@ -20,7 +20,13 @@ export const REQUIRED_FIELDS = ['date', 'employee', 'task', 'status'] as const;
 export type Field =
   | 'date' | 'employee' | 'employeeId' | 'department' | 'task' | 'category'
   | 'status' | 'priority' | 'startDate' | 'startTime' | 'completionDate'
-  | 'completionTime' | 'expectedDuration' | 'actualDuration' | 'link' | 'notes';
+  | 'completionTime' | 'expectedDuration' | 'actualDuration' | 'link' | 'notes'
+  /**
+   * What the person meant to do, beside what they did. The DWR format carries
+   * both: "What was I supposed to do today?" and "What did I do?". The plan is
+   * never the work, but it is the work's name when the other cell is empty.
+   */
+  | 'plannedTask';
 
 export interface Cell { text: string; href: string }
 export interface Table {
@@ -50,6 +56,21 @@ export interface HeaderMap {
   partialHeader?: boolean;
   /** Columns resolved from their contents rather than their heading. */
   decisions?: ColumnDecision[];
+  /**
+   * Facts a title line above the header states once for every row:
+   * "DWR: 001 | Emp Name: Asha Rao | Designation | Date: 28/09/2026".
+   */
+  banner?: Banner;
+}
+
+/** What a report's title line says about the whole sheet. */
+export interface Banner {
+  employee?: string;
+  /** yyyy-mm-dd */
+  date?: string;
+  department?: string;
+  /** The line it was read from, so the attribution can be inspected. */
+  quote: string;
 }
 
 export interface Employee {
@@ -58,6 +79,13 @@ export interface Employee {
   aliases: string[];
   department: string;
   active: boolean;
+  /** Work address, when the roster gave one. Identifies the sender of a report. */
+  email?: string;
+  /**
+   * Stated by the organisation (a roster import) rather than guessed from a
+   * report. Only these people count when roster-only mode is on.
+   */
+  onRoster?: boolean;
 }
 export interface Department {
   id: string;
@@ -99,6 +127,12 @@ export interface EngineConfig {
   repeatSameDayReviewMin: number;
   similarityThreshold: number;
   weekStart: 'MONDAY' | 'SUNDAY';
+  /**
+   * Import work only for people on the team roster. Off by default: with it
+   * on, a report from someone the roster does not list is skipped, which is
+   * how a team outside scope (the Dubai office, say) is kept out entirely.
+   */
+  rosterOnly: boolean;
 }
 
 export const DEFAULT_ENGINE_CONFIG: EngineConfig = {
@@ -115,7 +149,8 @@ export const DEFAULT_ENGINE_CONFIG: EngineConfig = {
   repeatHighMin: 8,
   repeatSameDayReviewMin: 3,
   similarityThreshold: 0.88,
-  weekStart: 'MONDAY'
+  weekStart: 'MONDAY',
+  rosterOnly: false
 };
 
 export type DurationBasis = 'Reported' | 'Derived' | 'Insufficient Data';
@@ -197,6 +232,11 @@ export interface SourceDocument {
   /** A date stated in a title line above the header, with the phrase it came from. */
   titleDate?: { date: string; quote: string };
   /**
+   * Who the report belongs to, stated by the person submitting it (the Manual
+   * entry form). Used only for rows whose table names nobody.
+   */
+  statedEmployee?: string;
+  /**
    * The covering text of the email this document came from.
    *
    * A spreadsheet arrives with a sentence — "Sales team update for yesterday"
@@ -224,4 +264,9 @@ export interface IngestResult {
   skippedIdempotent: number;
   newEmployees: Employee[];
   message: string;
+  /**
+   * Rows left out because roster-only mode is on and the person is not on the
+   * roster. Not rejections: nothing is wrong with them, they are out of scope.
+   */
+  outsideRoster?: { name: string; rows: number }[];
 }

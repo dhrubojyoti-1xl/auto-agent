@@ -133,14 +133,15 @@ d('what happened to each message', () => {
     expect(row.evidence).not.toMatch(/no report table/i);
   });
 
-  it('separates what needs a person from what was decided', async () => {
+  it('shows none of the messages that were not reports, and counts them', async () => {
+    // Only reports are ever shown (28-09-2026). The PDF and the screenshot
+    // could not be read, so nothing is known to be a report in them: they are
+    // counted as unreadable, never listed by subject or sender.
     const outcomes = await queries.getMessageOutcomes(uid, 50);
-    const review = outcomes.filter((o: any) =>
-      ['REVIEW_REQUIRED', 'UNSUPPORTED_FORMAT', 'POSSIBLE_REPORT'].includes(o.classification));
-    expect(review.map((o: any) => o.subject).sort())
-      .toEqual(['Daily Report', 'todays work']);
+    expect(outcomes.map((o: any) => o.subject)).toEqual([]);
     // The processed report is not in this list at all.
     expect(outcomes.some((o: any) => o.classification === 'DEPARTMENTAL_REPORT')).toBe(false);
+    expect(await queries.getOtherMessageCount(uid)).toEqual({ total: 4, unreadable: 2 });
   });
 
   it('says nothing about a signature logo', async () => {

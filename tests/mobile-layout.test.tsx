@@ -22,8 +22,10 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
   return out;
 }
 
+// Forward slashes throughout, so the path checks below hold on Windows too.
+const ROOT = process.cwd().replace(/\\/g, '/') + '/';
 const FILES = sourceFiles(join(process.cwd(), 'src/app'))
-  .map(f => ({ file: f.replace(process.cwd() + '/', ''), text: readFileSync(f, 'utf8') }));
+  .map(f => ({ file: f.replace(/\\/g, '/').replace(ROOT, ''), text: readFileSync(f, 'utf8') }));
 
 describe('nothing is laid out wider than a phone', () => {
   it('no inline pixel width exceeds a 375px viewport', () => {
