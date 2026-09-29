@@ -187,11 +187,17 @@ d('the review fixes, end to end', () => {
     });
   });
 
-  it('ROSTER_ONLY narrows every list of people to the roster', async () => {
+  it('ROSTER_ONLY offers the roster in the drop-downs, and nobody else', async () => {
     process.env.ROSTER_ONLY = 'true';
     try {
       const opts = await q.getFilterOptions(UID);
-      expect(opts.employees).toEqual(['Asha Rao']);
+      // Neha has sent nothing, and is exactly who a manager filters for.
+      expect(opts.employees).toEqual(['Asha Rao', 'Neha Kulkarni']);
+      expect(opts.departments).toEqual(['Content', 'SOP', 'Support']);
+      const sop = await q.getFilterOptions(UID, { department: 'SOP' });
+      expect(sop.employees).toEqual(['Asha Rao', 'Neha Kulkarni']);
+      const content = await q.getFilterOptions(UID, { department: 'Content' });
+      expect(content.employees).toEqual([]);
     } finally {
       delete process.env.ROSTER_ONLY;
     }

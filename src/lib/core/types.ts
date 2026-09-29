@@ -237,6 +237,11 @@ export interface SourceDocument {
    */
   statedEmployee?: string;
   /**
+   * The day the report covers, stated on the Manual entry form. Like
+   * statedEmployee, it stands in for a column the table does not have.
+   */
+  statedDate?: string;
+  /**
    * The covering text of the email this document came from.
    *
    * A spreadsheet arrives with a sentence — "Sales team update for yesterday"

@@ -95,3 +95,50 @@ export function looksLikePersonName(raw: string): boolean {
   if (keys.some(k => WORK_WORDS.has(k) || CONNECTORS.has(k))) return false;
   return true;
 }
+
+/** Edit distance between two strings, giving up (returning max + 1) past max. */
+function editDistance(a: string, b: string, max: number): number {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    let rowMin = i;
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      rowMin = Math.min(rowMin, cur[j]);
+    }
+    if (rowMin > max) return max + 1;
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+/**
+ * The roster name a guessed name is probably a misspelling of, or ''.
+ *
+ * "Sasikala Lognathan" is "Sasikala Loganathan" and "Pooja Jagadale" is
+ * "Puja Jagadale": the reports spell a colleague one way and the roster
+ * another, and with ROSTER_ONLY on, the misspelt reports are left out. Saying
+ * so beside the guessed name is what gets the alias added.
+ *
+ * Deliberately narrow — a hint that names the wrong colleague is worse than no
+ * hint: at most two letters apart over the whole name, the same number of
+ * words, each word starting with the same letter, and never for a short name,
+ * where two letters make a different person.
+ */
+export function likelySamePerson(name: string, rosterNames: string[]): string {
+  const k = keyify(name);
+  if (k.replace(/ /g, '').length < 8) return '';
+  const words = k.split(' ');
+  let best = '';
+  let bestDistance = 3;
+  for (const candidate of rosterNames) {
+    const rk = keyify(candidate);
+    if (!rk || rk === k) continue;
+    const rw = rk.split(' ');
+    if (rw.length !== words.length || rw.some((w, i) => w[0] !== words[i][0])) continue;
+    const d = editDistance(k, rk, 2);
+    if (d < bestDistance) { best = candidate; bestDistance = d; }
+  }
+  return bestDistance <= 2 ? best : '';
+}

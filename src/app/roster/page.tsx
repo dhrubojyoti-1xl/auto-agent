@@ -3,7 +3,8 @@ import Nav from '../nav';
 import ImportForm from './import-form';
 import { getSession } from '@/lib/auth';
 import { loadRoster } from '@/lib/db';
-import { looksLikePersonName } from '@/lib/core/person-name';
+import { getAutoCreatedEmployees } from '@/lib/queries';
+import { likelySamePerson, looksLikePersonName } from '@/lib/core/person-name';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,16 +21,25 @@ export default async function RosterPage() {
   const session = await getSession();
   if (!session) redirect('/login');
 
-  const { people: everyone, departments } = await loadRoster();
+  const [{ people: everyone, departments }, guessedHere] = await Promise.all([
+    loadRoster(), getAutoCreatedEmployees(session.userId)
+  ]);
   // The roster is the list the organisation gave. Records the importer made up
   // from reports are shown apart from it: the ones that could be a person as a
   // short list to confirm, and the rest — task titles, places, software panels
   // an earlier version filed as people — as a count. Nothing is deleted.
+  //
+  // Only guesses with work filed in this account are worth confirming. The
+  // rest — test names from another inbox among them — are counted, not listed.
   const people = everyone.filter(p => !p.autoCreated);
+  const rosterNames = people.map(p => p.name);
+  const tasksById = new Map(guessedHere.map(g => [g.id, g.tasks]));
   const guessed = everyone.filter(p => p.autoCreated);
-  const guessedPeople = guessed.filter(p => looksLikePersonName(p.name))
+  const personLike = guessed.filter(p => looksLikePersonName(p.name));
+  const guessedPeople = personLike.filter(p => (tasksById.get(p.id) || 0) > 0)
     .sort((a, b) => a.name.localeCompare(b.name));
-  const guessedJunk = guessed.length - guessedPeople.length;
+  const idleGuesses = personLike.length - guessedPeople.length;
+  const guessedJunk = guessed.length - personLike.length;
   const rosterOnly = /^(1|true|yes|on)$/i.test(process.env.ROSTER_ONLY || '') && people.length > 0;
   const undeclared = people.filter(p => !p.department);
   const byDepartment = new Map<string, typeof people>();
@@ -152,19 +162,38 @@ export default async function RosterPage() {
               <span className="muted">({guessedPeople.length})</span>
             </summary>
             <p className="cap" style={{ marginTop: '.6rem' }}>
-              Names an earlier import took from reports. The department is its guess.
+              Names an earlier import took from reports. The department is its guess. Where
+              a name is probably someone on your list spelt differently, add it to that
+              person&rsquo;s &ldquo;Also known as&rdquo; so their reports are counted.
             </p>
             <div style={{ overflowX: 'auto' }}>
               <table>
-                <thead><tr><th>Name</th><th>Guessed department</th></tr></thead>
+                <thead>
+                  <tr>
+                    <th>Name</th><th>Guessed department</th><th className="num">Tasks</th>
+                    <th>Possibly the same as</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {guessedPeople.map(p => (
-                    <tr key={p.id}><td>{p.name}</td><td>{p.department || '—'}</td></tr>
+                    <tr key={p.id}>
+                      <td>{p.name}</td><td>{p.department || '—'}</td>
+                      <td className="num">{tasksById.get(p.id) || 0}</td>
+                      <td>{likelySamePerson(p.name, rosterNames) || '—'}</td>
+                    </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           </details>
+        )}
+
+        {idleGuesses > 0 && (
+          <p className="small muted">
+            {idleGuesses} other name{idleGuesses === 1 ? '' : 's'} taken from reports
+            {idleGuesses === 1 ? ' has' : ' have'} no work filed in this account and
+            {idleGuesses === 1 ? ' is' : ' are'} not shown.
+          </p>
         )}
 
         {guessedJunk > 0 && (

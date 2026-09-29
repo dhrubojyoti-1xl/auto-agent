@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { connectionStyle, query } from '@/lib/db';
+import { isoStamp } from '@/lib/format-date';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -58,8 +59,10 @@ export async function GET() {
               coalesce(sum(rows_rejected),0)::int    as rejected,
               coalesce(sum(rows_duplicate),0)::int   as duplicates
        from sync_runs where owner_user_id = $1`, [session.userId]);
-    checks.lastSuccessfulSync = s?.last_ok ? String(s.last_ok).slice(0, 19).replace('T', ' ') : 'never';
-    checks.lastFailedSync = s?.last_fail ? String(s.last_fail).slice(0, 19).replace('T', ' ') : 'never';
+    // ISO in UTC. String() of the Date the driver returns is "Tue Sep 29 …",
+    // and slicing that by ISO offsets printed " ue Sep 29 2026 07:".
+    checks.lastSuccessfulSync = isoStamp(s?.last_ok);
+    checks.lastFailedSync = isoStamp(s?.last_fail);
     checks.syncRuns = String(s?.runs ?? 0);
     checks.emailsScanned = String(s?.scanned ?? 0);
     checks.reportsFound = String(s?.reports ?? 0);

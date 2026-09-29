@@ -57,7 +57,7 @@ export default async function ConnectPage({
     <>
       <Nav />
       <main className="shell">
-        <h1>Connect your inbox</h1>
+        <h1>Inbox</h1>
         {me && (
           <p className="small muted" style={{ marginTop: '-.4rem' }}>
             Signed in as <strong>{me.email}</strong>

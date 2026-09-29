@@ -456,9 +456,11 @@ export function ingestDocument(
     if (!tables.length) tables = extractPipeTables(text);
   }
 
-  // 2. Keep only tables that map to the schema
+  // 2. Keep only tables that map to the schema. What the Manual entry form
+  // states counts as a column the table does not need.
+  const stated = { employee: !!cleanWhitespace(doc.statedEmployee), date: !!doc.statedDate };
   const reportTables = tables
-    .map(t => ({ table: t, header: mapHeaderRow(t.rows, masters, cfg) }))
+    .map(t => ({ table: t, header: mapHeaderRow(t.rows, masters, cfg, stated) }))
     .filter(x => x.header !== null) as { table: typeof tables[number]; header: NonNullable<ReturnType<typeof mapHeaderRow>> }[];
 
   if (!reportTables.length) {
@@ -466,9 +468,13 @@ export function ingestDocument(
       reportId, status: 'NO_DATA', department: '', reportDate: null,
       tablesFound: 0, rowsExtracted: 0, accepted: [], rejected: [],
       skippedIdempotent: 0, newEmployees: [],
-      message: `No table with recognisable Date/Employee/Task/Status headers. ` +
-               `Tables seen: ${tables.length}. Add the missing header wording to the ` +
-               `header alias list if this really is a report.`
+      message: tables.length
+        ? `A table was found, but its heading row was not recognised as a report. ` +
+          `A report needs columns for the task and its status, and must say who and ` +
+          `which day: as columns, in a title line (Emp Name: … Date: …), or in the ` +
+          `Employee and Report date fields of Manual entry.`
+        : `No table was found. Paste the rows with their heading row, copied from the ` +
+          `sheet, or typed with a | between columns.`
     };
   }
 

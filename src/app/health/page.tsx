@@ -14,16 +14,22 @@ export const dynamic = 'force-dynamic';
 /**
  * When the scheduled check next runs, in the manager's terms.
  *
- * The cron fires at 03:00 UTC daily, so "next run" is either later today or
- * tomorrow. Computed rather than stated, because a fixed sentence goes stale
- * the moment somebody reads it at 04:00.
+ * The cron fires at 03:00 UTC daily (vercel.json), so "next run" is either
+ * later today or tomorrow. Computed rather than stated, because a fixed
+ * sentence goes stale the moment somebody reads it at 04:00 — and shown in
+ * the same zone as every other time on the page, with the zone named.
  */
 function nextScheduledSync(): string {
   const now = new Date();
   const next = new Date(Date.UTC(
     now.getUTCFullYear(), now.getUTCMonth(),
     now.getUTCDate() + (now.getUTCHours() >= 3 ? 1 : 0), 3, 0, 0));
-  return `${next.toISOString().slice(0, 10)} 03:00 UTC`;
+  return formatStamp(next);
+}
+
+/** "08:30 IST" — the daily 03:00 UTC run, in the zone the page uses. */
+function scheduleTime(): string {
+  return formatStamp(new Date(Date.UTC(2026, 0, 1, 3, 0, 0))).slice(11);
 }
 
 /** PHASE 24 — everything an operator needs to trust the pipeline, in one place. */
@@ -150,16 +156,16 @@ export default async function SyncHealthPage() {
                    note={needsReconnect ? '— reconnect above to resume' : ''} />
               <Row label="Last successful sync"
                    value={formatStamp(runs.find(r => r.status === 'OK')?.startedAt, 'never')} />
-              <Row label="Automatic schedule" value="daily at 03:00 UTC"
-                   note={`— next run ${nextScheduledSync()}; plus Sync now. Hourly needs a Vercel Pro plan`} />
+              <Row label="Automatic schedule" value={`daily at ${scheduleTime()}`}
+                   note={`— next run ${nextScheduledSync()}. Sync now on the Inbox page checks at any time.`} />
               <Row label="AI commentary"
                    value={process.env.ANTHROPIC_API_KEY ? 'configured' : 'not configured'}
                    note={process.env.ANTHROPIC_API_KEY
                      ? '— reused when the figures have not changed'
                      : '— the dashboard and reports work without it'} />
-              <Row label="Running build"
+              <Row label="App version"
                    value={(process.env.VERCEL_GIT_COMMIT_SHA || 'local').slice(0, 7)}
-                   note={process.env.VERCEL_REGION ? `— ${process.env.VERCEL_REGION}` : '— local'} />
+                   note="— quote this when reporting a problem" />
             </tbody>
           </table>
         </div>
@@ -167,8 +173,8 @@ export default async function SyncHealthPage() {
         <h2>Keep a copy</h2>
         <div className="card">
           <p className="small muted" style={{ marginTop: 0 }}>
-            Supabase&rsquo;s free plan has no point-in-time recovery, so the safety net is a
-            file you hold. The export contains your tasks, rejected rows, import history and
+            The database cannot be rewound to an earlier day on its current plan, so the
+            safety net is a file you hold. The export contains your tasks, rejected rows, import history and
             master data &mdash; everything that cannot simply be re-read from Gmail. It never
             contains your Gmail token.
           </p>

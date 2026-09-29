@@ -35,7 +35,7 @@ export default async function SlowPage(
           than the configured multiplier. &ldquo;Expected&rdquo; is whatever was configured for
           the task category — or, when nothing was configured, the median of comparable history
           (the same task, then category, then department), requiring at least three observations
-          before any median is trusted. The <strong>Baseline from</strong> column says which.
+          before any median is trusted. Each slow task says which baseline it was measured against.
         </p>
 
         <Filters basePath="/slow"
@@ -44,12 +44,16 @@ export default async function SlowPage(
                  search={search} minDate={options.minDate} maxDate={options.maxDate}
                  showSearch />
 
-        <div className="banner warn">
-          <strong>{kpis.insufficientDuration} of {kpis.total} tasks cannot be measured at all</strong>
-          {' '}— they carry no start/completion timestamps, so their duration is unknown. They are
-          excluded from this page rather than assumed to be on time. Add start and end time columns
-          to the report template and they will appear here automatically.
-        </div>
+        {kpis.total > 0 && kpis.insufficientDuration > 0 && (
+          <div className="banner warn">
+            <strong>
+              {kpis.insufficientDuration} of {kpis.total} tasks have no time recorded
+            </strong>
+            {' '}— no &ldquo;Time taken&rdquo; and no start and end times &mdash; so they cannot be
+            checked for slowness. They are left out here rather than assumed to be on time.
+            Filling in <strong>Time taken (Minutes)</strong> in the daily report is enough.
+          </div>
+        )}
 
         {rows.length === 0 ? (
           <div className="card">

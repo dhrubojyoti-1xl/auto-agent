@@ -20,6 +20,7 @@ import type { ReportStatus } from './core/report';
 import { renderReport } from './core/report';
 import { loadTasks, query } from './db';
 import { reportRejection } from './visibility';
+import { formatDay } from './format-date';
 import { engineConfig } from './pipeline';
 
 export interface GeneratedReport {
@@ -90,7 +91,8 @@ export async function generateReport(
     tasks, analysis, departments, employees,
     rejections.map(r => ({
       reason: r.rejection_reason,
-      date: r.claimed_date || String(r.logged_at).slice(0, 10)
+      // logged_at arrives as a Date; String() of it starts "Tue Sep 29".
+      date: r.claimed_date || formatDay(r.logged_at, '')
     })),
     type, start, end, new Date().toISOString().slice(0, 16).replace('T', ' ')
   );

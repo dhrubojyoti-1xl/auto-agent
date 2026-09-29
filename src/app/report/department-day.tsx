@@ -20,7 +20,11 @@ export default function DepartmentDaySection({ date, available, days, silent = [
         <div className="empty">
           <div className="title">No reports yet</div>
           <div className="why">
-            Each department&rsquo;s day is summarised here as soon as its first report is imported.
+            Each department&rsquo;s day is summarised here as soon as its first report is imported
+            {silent.length > 0
+              ? <>, and any of your {silent.length} roster department{silent.length === 1 ? '' : 's'}
+                {' '}that sends nothing that day is named. Waiting for: {silent.join(', ')}.</>
+              : '.'}
           </div>
         </div>
       </section>
