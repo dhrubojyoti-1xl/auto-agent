@@ -154,8 +154,15 @@ export function extractTables(html: string): Table[] {
   return out;
 }
 
-/** Plain-text fallback: contiguous lines containing "|" become a table. */
-export function extractPipeTables(text: string): Table[] {
+/**
+ * Plain-text fallback: contiguous lines containing "|" become a table.
+ *
+ * Two pipes a line by default, because one pipe turns up in ordinary prose
+ * ("Sales | Q3"). A caller that knows the text is a table — Manual entry with
+ * the Employee and Report date fields filled in — can accept one, so a
+ * two-column "Task | Status" paste is read.
+ */
+export function extractPipeTables(text: string, minPipes = 2): Table[] {
   const lines = String(text || '').split(/\r?\n/);
   const tables: Table[] = [];
   let buf: string[] = [];
@@ -186,7 +193,7 @@ export function extractPipeTables(text: string): Table[] {
   };
 
   lines.forEach(l => {
-    if ((l.match(/\|/g) || []).length >= 2) buf.push(l);
+    if ((l.match(/\|/g) || []).length >= minPipes) buf.push(l);
     else if (buf.length) flush();
   });
   if (buf.length) flush();
@@ -342,7 +349,13 @@ export function mapHeaderRow(
     (f === 'task' && 'plannedTask' in mapping);
   const withBanner = (m: HeaderMap): HeaderMap => (banner ? { ...m, banner } : m);
 
-  const found = mapHeaderRowWith(rows, masters, cfg, scanLimit, has);
+  // Each field the form states is a heading the table did not need to match:
+  // "Task | Status" plus both fields is a complete report of two headings.
+  const statedCount = (stated.employee ? 1 : 0) + (stated.date ? 1 : 0);
+  const effective = statedCount
+    ? { ...cfg, minHeaderMatches: Math.max(2, cfg.minHeaderMatches - statedCount) }
+    : cfg;
+  const found = mapHeaderRowWith(rows, masters, effective, scanLimit, has);
   return found ? withBanner(found) : null;
 }
 

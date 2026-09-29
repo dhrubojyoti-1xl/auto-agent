@@ -40,6 +40,26 @@ describe('F3: the Manual entry fields complete a table that names no one and no 
     expect(res.message).toMatch(/Employee and Report date/);
   });
 
+  it('reads a two-column "Task | Status" paste when both fields are filled in', () => {
+    const content = 'Task | Status\nUpdated the store checklist | Completed\nFiled the audit | Partial';
+    const res = ingestDocument(
+      pastedDocument({ content, employee: 'Asha Rao', date: '25/09/2026' }, 'DMY'),
+      seedMasters([]), cfg, new Map());
+    expect(res.accepted.map(r => [r.employeeName, r.date, r.taskStatus])).toEqual([
+      ['Asha Rao', '2026-09-25', 'Completed'],
+      ['Asha Rao', '2026-09-25', 'In Progress']
+    ]);
+  });
+
+  it('never treats one-pipe prose as a table without both fields', () => {
+    const content = 'Sales | Q3 review\nNotes | see attached';
+    for (const body of [{ content }, { content, employee: 'Asha Rao' }]) {
+      const res = ingestDocument(pastedDocument(body, 'DMY'), seedMasters([]), cfg, new Map());
+      expect(res.tablesFound).toBe(0);
+      expect(res.accepted).toHaveLength(0);
+    }
+  });
+
   it('does not loosen anything for email: a stated title date alone is not a form', () => {
     const res = ingestDocument({
       documentId: 'mail-1', subject: 'Notes', sender: 'Asha Rao <asha@example.com>',

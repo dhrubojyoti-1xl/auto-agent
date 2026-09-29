@@ -446,6 +446,9 @@ export function ingestDocument(
   const reportId = 'RPT-' + shortHash(doc.documentId, 10).toUpperCase();
   const createdEmployees: Employee[] = [];
 
+  // What the Manual entry form states counts as a column the table does not need.
+  const stated = { employee: !!cleanWhitespace(doc.statedEmployee), date: !!doc.statedDate };
+
   // 1. Candidate tables. Pre-parsed tables (an attachment) win outright.
   let tables = doc.tables?.length ? doc.tables : (doc.html ? extractTables(doc.html) : []);
   if (!tables.length) {
@@ -454,11 +457,11 @@ export function ingestDocument(
     // because a DWR's title line contains pipes of its own.
     tables = extractTabTables(text);
     if (!tables.length) tables = extractPipeTables(text);
+    // With who and which day stated, two columns are a whole report.
+    if (!tables.length && stated.employee && stated.date) tables = extractPipeTables(text, 1);
   }
 
-  // 2. Keep only tables that map to the schema. What the Manual entry form
-  // states counts as a column the table does not need.
-  const stated = { employee: !!cleanWhitespace(doc.statedEmployee), date: !!doc.statedDate };
+  // 2. Keep only tables that map to the schema.
   const reportTables = tables
     .map(t => ({ table: t, header: mapHeaderRow(t.rows, masters, cfg, stated) }))
     .filter(x => x.header !== null) as { table: typeof tables[number]; header: NonNullable<ReturnType<typeof mapHeaderRow>> }[];

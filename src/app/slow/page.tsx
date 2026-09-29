@@ -44,15 +44,24 @@ export default async function SlowPage(
                  search={search} minDate={options.minDate} maxDate={options.maxDate}
                  showSearch />
 
-        {kpis.total > 0 && kpis.insufficientDuration > 0 && (
+        {kpis.total > 0 && kpis.untimed > 0 && (
           <div className="banner warn">
-            <strong>
-              {kpis.insufficientDuration} of {kpis.total} tasks have no time recorded
-            </strong>
-            {' '}— no &ldquo;Time taken&rdquo; and no start and end times &mdash; so they cannot be
-            checked for slowness. They are left out here rather than assumed to be on time.
-            Filling in <strong>Time taken (Minutes)</strong> in the daily report is enough.
+            <strong>{kpis.untimed} of {kpis.total} tasks have no time recorded</strong>
+            {' '}&mdash; no &ldquo;Time taken&rdquo; and no start and end times &mdash; so they
+            cannot be checked for slowness. They are left out here rather than assumed to be
+            on time. Filling in <strong>Time taken (Minutes)</strong> in the daily report is
+            enough.
           </div>
+        )}
+        {/* Timed, but nothing yet to compare with: not a fault in the reports. */}
+        {kpis.insufficientDuration - kpis.untimed > 0 && (
+          <p className="small muted">
+            {kpis.insufficientDuration - kpis.untimed} more
+            {kpis.insufficientDuration - kpis.untimed === 1 ? ' task has' : ' tasks have'} a
+            time but nothing to compare it with yet. A task is judged against at least three
+            earlier timings of the same work (or, failing that, its category or department),
+            so these are checked as more reports arrive.
+          </p>
         )}
 
         {rows.length === 0 ? (

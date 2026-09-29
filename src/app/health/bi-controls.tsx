@@ -87,9 +87,9 @@ export default function BiControls() {
   return (
     <div>
       <p className="small muted" style={{ marginTop: 0 }}>
-        Creates a read-only login so a charting tool can read your reporting data
-        without your database password. Choose a password below &mdash; it is sent
-        straight to the database and never stored here, so write it down.
+        Lets a charting tool such as Power BI or Looker Studio read these figures
+        without being able to change anything. Choose a password below &mdash; it goes
+        straight to the database and is never stored here, so write it down.
       </p>
       <div className="row" style={{ alignItems: 'flex-start' }}>
         <input type="password" value={password} autoComplete="new-password"
