@@ -473,6 +473,26 @@ export async function getFilterOptions(
   };
 }
 
+/**
+ * How many slow tasks the scope holds. The chart below shows only the worst
+ * few, so its length is not the count: the headline figure read 8 on a page
+ * whose Slow tasks list had 204 rows.
+ */
+export async function countSlowTasks(
+  ownerUserId: number,
+  opts: { department?: string; employee?: string; from?: string; to?: string } = {}
+): Promise<number> {
+  const params: unknown[] = [ownerUserId];
+  const where = ['owner_user_id = $1'];
+  if (opts.department) { params.push(opts.department); where.push(`department = $${params.length}`); }
+  if (opts.employee) { params.push(opts.employee); where.push(`employee = $${params.length}`); }
+  if (opts.from) { params.push(opts.from); where.push(`task_date >= $${params.length}`); }
+  if (opts.to) { params.push(opts.to); where.push(`task_date <= $${params.length}`); }
+  const [r] = await query<{ n: number }>(
+    `select count(*)::int as n from slow_tasks where ${where.join(' and ')}`, params);
+  return Number(r?.n ?? 0);
+}
+
 /** Slow tasks and repeat groups, already scoped, for their charts. */
 export async function getSlowTaskChart(
   ownerUserId: number,

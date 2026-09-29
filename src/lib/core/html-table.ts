@@ -161,12 +161,20 @@ export function extractPipeTables(text: string): Table[] {
   let buf: string[] = [];
 
   const flush = () => {
-    const rows = buf
-      .filter(l => !/^[\s|:+-]+$/.test(l))
+    const lines = buf.filter(l => !/^[\s|:+-]+$/.test(l));
+    // "| a | b |" has an empty cell before the first pipe and after the last
+    // that belongs to the notation, not the data. Whether a table is written
+    // that way is decided once, from its first line: deciding per row threw
+    // away a genuinely empty first cell — a DWR line with no Sr. No. — and
+    // slid every value one column to the left.
+    const first = lines[0] || '';
+    const leading = /^\s*\|/.test(first);
+    const trailing = /\|\s*$/.test(first);
+    const rows = lines
       .map(l => {
         const parts = l.split('|').map(p => cleanWhitespace(p));
-        if (parts.length && parts[0] === '') parts.shift();
-        if (parts.length && parts[parts.length - 1] === '') parts.pop();
+        if (leading && parts.length && parts[0] === '') parts.shift();
+        if (trailing && parts.length && parts[parts.length - 1] === '') parts.pop();
         return parts.map(p => {
           const u = p.match(/https?:\/\/\S+/);
           return { text: p, href: u ? u[0] : '' } as Cell;
