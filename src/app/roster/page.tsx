@@ -38,6 +38,8 @@ export default async function RosterPage() {
     byDepartment.set(k, [...(byDepartment.get(k) || []), p]);
   });
   const managerOf = new Map(departments.map(d => [d.name, d]));
+  const unstaffed = departments.filter(d =>
+    !byDepartment.has(d.name) && d.manager && d.name.toLowerCase() !== 'unassigned');
 
   return (
     <>
@@ -173,17 +175,19 @@ export default async function RosterPage() {
           </p>
         )}
 
-        {departments.filter(d => !byDepartment.has(d.name)).length > 0 && (
+        {/* Only departments someone runs. The app's first-run defaults
+            (Finance, Marketing, Sales, Support) have no manager and nobody
+            on the list, and "Unassigned" is the absence of a department:
+            listing them made the company's own structure look wrong. */}
+        {unstaffed.length > 0 && (
           <div className="chart-card">
             <h3>Departments with nobody listed</h3>
             <p className="cap">
-              These exist and have a manager, but no one has been assigned to them yet.
+              These have a manager, but nobody on your list is in them yet.
             </p>
             <ul>
-              {departments.filter(d => !byDepartment.has(d.name)).map(d => (
-                <li key={d.id}>
-                  {d.name}{d.manager ? ` — ${d.manager}` : ''}
-                </li>
+              {unstaffed.map(d => (
+                <li key={d.id}>{d.name} — {d.manager}</li>
               ))}
             </ul>
           </div>
