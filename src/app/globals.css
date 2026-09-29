@@ -97,10 +97,13 @@ button, .btn {
 }
 button.secondary { background: var(--panel); color: var(--text); border-color: var(--border); }
 button:disabled { opacity: .55; cursor: not-allowed; }
-textarea, input[type=text], input[type=password], select {
+textarea, input[type=text], input[type=password], input[type=date], input[type=email],
+input[type=number], input[type=search], select {
   font: inherit; width: 100%; background: var(--panel); color: var(--text);
   border: 1px solid var(--border); border-radius: 8px; padding: .55rem .7rem;
 }
+/* The date box draws a calendar icon that makes it 2px taller than a text box beside it. */
+input[type=date] { padding-block: calc(.55rem - 1px); }
 textarea { min-height: 220px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; }
 label { display: block; font-size: .8rem; color: var(--muted); margin: .9rem 0 .3rem; }
 
@@ -169,7 +172,7 @@ pre.report {
 .chart-card .cap { color: var(--muted); font-size: .78rem; margin: 0 0 .8rem; }
 
 /* filters */
-.filters { display: flex; gap: .6rem; flex-wrap: wrap; align-items: end;
+.filters { display: flex; gap: .6rem; flex-wrap: wrap; align-items: flex-end;
            background: var(--panel); border: 1px solid var(--border);
            border-radius: var(--radius); padding: .8rem 1rem; margin-bottom: 1.2rem; }
 .filters .f { display: flex; flex-direction: column; gap: .25rem; }

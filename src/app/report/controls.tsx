@@ -2,7 +2,11 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-export default function ReportControls({ aiConfigured }: { aiConfigured: boolean }) {
+export default function ReportControls({ aiConfigured, hasData = true }: {
+  aiConfigured: boolean;
+  /** False until the first report is imported: there is nothing to report on. */
+  hasData?: boolean;
+}) {
   const router = useRouter();
   const [type, setType] = useState<'DAILY' | 'WEEKLY' | 'MONTHLY'>('DAILY');
   const [useAi, setUseAi] = useState(aiConfigured);
@@ -57,21 +61,26 @@ export default function ReportControls({ aiConfigured }: { aiConfigured: boolean
                  onChange={e => setUseAi(e.target.checked)} style={{ width: 'auto' }} />
           Use AI commentary
         </label>
-        <button disabled={!!busy}
+        <button disabled={!!busy || !hasData}
                 onClick={() => post('/api/report', { type, useAi }, 'report')}>
           {busy === 'report' ? 'Generating…' : 'Generate report'}
         </button>
         {aiConfigured && useAi && (
-          <button className="secondary" disabled={!!busy}
+          <button className="secondary" disabled={!!busy || !hasData}
                   onClick={() => post('/api/report', { type, useAi, force: true }, 'report')}>
             {busy === 'report' ? 'Rewriting…' : 'Rewrite commentary'}
           </button>
         )}
-        <button className="secondary" disabled={!!busy}
+        <button className="secondary" disabled={!!busy || !hasData}
                 onClick={() => post('/api/rebuild', {}, 'rebuild')}>
           {busy === 'rebuild' ? 'Rebuilding…' : 'Rebuild analysis'}
         </button>
       </div>
+      {!hasData && (
+        <p className="small muted" style={{ margin: '.6rem 0 0' }}>
+          Nothing to report on yet. These become available once the first report is imported.
+        </p>
+      )}
       {error && <div className="banner bad" style={{ marginBottom: 0 }}>{error}</div>}
       {done && <div className="banner ok" style={{ marginBottom: 0 }}>{done}</div>}
     </div>

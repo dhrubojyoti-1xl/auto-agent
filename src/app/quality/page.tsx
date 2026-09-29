@@ -76,7 +76,11 @@ export default async function QualityPage() {
 
         <h2>Rejected rows</h2>
         {rejections.length === 0 ? (
-          <div className="card">No rejected rows. Every row imported cleanly.</div>
+          <div className="card">
+            {documents.length
+              ? 'No rejected rows. Every row imported cleanly.'
+              : 'No rows have been imported yet.'}
+          </div>
         ) : (
           <div className="table-wrap">
             <table>

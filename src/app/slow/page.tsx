@@ -3,6 +3,7 @@ import Nav from '../nav';
 import Filters from '../filters';
 import { getSession } from '@/lib/auth';
 import { getFilterOptions, getKpis, getSlowTasks } from '@/lib/queries';
+import { engineConfig } from '@/lib/pipeline';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,11 +32,11 @@ export default async function SlowPage(
       <main className="shell">
         <h1>Slow tasks</h1>
         <p className="sub">
-          A task appears here when its actual duration exceeds the expected duration by more
-          than the configured multiplier. &ldquo;Expected&rdquo; is whatever was configured for
-          the task category — or, when nothing was configured, the median of comparable history
-          (the same task, then category, then department), requiring at least three observations
-          before any median is trusted. Each slow task says which baseline it was measured against.
+          A task is listed when it took more than {engineConfig().slowTaskMultiplier} times as
+          long as usual. &ldquo;Usual&rdquo; is the time set for its category or, if none is
+          set, the typical time of at least three similar past tasks &mdash; the same task
+          first, then its category, then its department. Each slow task says which one it was
+          measured against.
         </p>
 
         <Filters basePath="/slow"
