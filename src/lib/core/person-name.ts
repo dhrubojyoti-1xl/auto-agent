@@ -52,7 +52,19 @@ const WORK_WORDS = new Set([
   'lesson', 'lessons', 'module', 'quiz', 'assessment', 'assessments', 'drive',
   'visit', 'visits', 'pending', 'progress', 'status', 'adhoc', 'misc',
   'miscellaneous', 'general', 'other', 'others', 'total', 'summary', 'na',
-  'none', 'all', 'yes', 'no', 'unassigned', 'unknown'
+  'none', 'all', 'yes', 'no', 'unassigned', 'unknown',
+  // Seen as "employees" on the live Data quality page, 29-09-2026: software
+  // panels, places, and the paperwork of HR work.
+  'panel', 'panels', 'group', 'today', 'dubai', 'delhi', 'noida', 'india', 'indian',
+  'uae', 'mumbai', 'pune', 'bengaluru', 'bangalore', 'gurgaon', 'gurugram',
+  'hyderabad', 'chennai', 'kolkata', 'sharjah', 'london', 'france', 'resource',
+  'resources', 'human', 'travel', 'reimbursement', 'welcome', 'kit', 'letter',
+  'letters', 'response', 'cv', 'database', 'chart', 'organisational',
+  'organizational', 'organisation', 'organization', 'welfare', 'committee',
+  'confirmation', 'gmail', 'birthday', 'birthdays', 'poster', 'posters',
+  'celebration', 'celebrations', 'probation', 'tracking', 'tracker', 'menu',
+  'invitation', 'agenda', 'signature', 'payment', 'payments', 'stipend', 'visa',
+  'permit', 'insurance', 'handbook', 'newsletter', 'newsletters', 'magazine'
 ]);
 
 /** Joining words that belong in a phrase, not a name. */
