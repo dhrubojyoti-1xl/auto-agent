@@ -63,11 +63,19 @@ export function computeDuration(
   return { hours: null, basis: 'Insufficient Data' };
 }
 
+/**
+ * A cell holding only a dash or a dot is a person writing "nothing here".
+ * Read as text, "-" became a task too short to import and turned an unused
+ * DWR line into a rejection. "NA" is deliberately not included: in a status
+ * column it means the task was dropped, which is a fact to keep.
+ */
+const EMPTY_MARK = /^[\s\-–—.]+$/;
+
 function readRowFields(cells: Cell[], mapping: Partial<Record<Field, number>>): Record<string, string> {
   const out: Record<string, string> = {};
   (Object.keys(mapping) as Field[]).forEach(field => {
     const c = cells[mapping[field] as number];
-    out[field] = c ? c.text : '';
+    out[field] = c && !EMPTY_MARK.test(c.text) ? c.text : '';
     if (field === 'link' && c && c.href) out[field] = c.href;
   });
   if (!out.link) {
