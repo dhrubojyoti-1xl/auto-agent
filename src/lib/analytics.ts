@@ -193,7 +193,8 @@ export async function getAttention(ownerUserId: number): Promise<AttentionItem[]
           and work_kind <> 'PLANNED' and slow_task_flag = 'TRUE')          as slow,
        (select count(*)::int from tasks where owner_user_id = $1
           and work_kind <> 'PLANNED'
-          and slow_task_flag = 'INSUFFICIENT_DATA')                        as no_duration,
+          and slow_task_flag = 'INSUFFICIENT_DATA'
+          and actual_duration is null)                                     as no_duration,
        (select count(*)::int from tasks where owner_user_id = $1
           and work_kind <> 'PLANNED'
           and task_status in ('Pending','In Progress','Blocked'))          as backlog,
@@ -315,9 +316,9 @@ export async function getAttention(ownerUserId: number): Promise<AttentionItem[]
     items.push({
       severity: 'info', count: num(quality.no_duration),
       title: 'Tasks without timing information',
-      detail: 'Duration cannot be measured, so these are excluded from slow-task ' +
-              'analysis rather than assumed to be on time. Add start and end time ' +
-              'columns to the report to enable it.',
+      detail: 'No time was recorded for these, so they are left out of the slow-task ' +
+              'check rather than assumed to be on time. Filling in Time taken ' +
+              '(Minutes) in the daily report is enough.',
       href: '/slow', action: 'How this works'
     });
   }

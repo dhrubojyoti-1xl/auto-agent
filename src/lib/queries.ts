@@ -68,6 +68,12 @@ export interface Kpis {
   repeatGroups: number;
   repeatAttention: number; departmentsReporting: number; employeesReporting: number;
   insufficientDuration: number; firstDate: string | null; lastDate: string | null;
+  /**
+   * The part of insufficientDuration with no time at all. The rest have a time
+   * but not yet three comparable timings to judge it against — not a gap in
+   * the reports, and not something a sender can fix.
+   */
+  untimed: number;
 }
 
 export async function getKpis(ownerUserId: number): Promise<Kpis> {
@@ -90,6 +96,8 @@ export async function getKpis(ownerUserId: number): Promise<Kpis> {
       count(distinct employee_name) filter (where employee_name <> all($2::text[]))::int
         as employees_reporting,
       count(*) filter (where slow_task_flag = 'INSUFFICIENT_DATA')::int as insufficient_duration,
+      count(*) filter (where slow_task_flag = 'INSUFFICIENT_DATA'
+                         and actual_duration is null)::int as untimed,
       min(task_date) as first_date, max(task_date) as last_date
     from tasks where owner_user_id = $1 and work_kind <> 'PLANNED'
       and task_status <> 'Ambiguous'`, [ownerUserId, excluded]);
@@ -103,6 +111,7 @@ export async function getKpis(ownerUserId: number): Promise<Kpis> {
     departmentsReporting: Number(r.departments_reporting),
     employeesReporting: Number(r.employees_reporting),
     insufficientDuration: Number(r.insufficient_duration),
+    untimed: Number(r.untimed ?? 0),
     firstDate: r.first_date ? String(r.first_date) : null,
     lastDate: r.last_date ? String(r.last_date) : null
   };

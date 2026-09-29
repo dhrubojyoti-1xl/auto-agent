@@ -93,8 +93,11 @@ export function buildInsight(
   } else if (kpis.insufficientDuration === kpis.total && kpis.total > 0) {
     points.push({
       tone: 'info', mark: 'ℹ',
-      text: `No task can be timed: none of the ${kpis.total} carries start and ` +
-            `end times, so nothing is called slow without evidence.`
+      text: kpis.untimed === kpis.total
+        ? `No task can be timed: none of the ${kpis.total} has a time taken recorded, ` +
+          `so nothing is called slow without evidence.`
+        : `No task can be judged slow yet: a task is compared with at least three ` +
+          `earlier timings of similar work, and there are not enough so far.`
     });
   }
 

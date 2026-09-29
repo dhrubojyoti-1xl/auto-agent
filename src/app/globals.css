@@ -47,6 +47,18 @@ nav.top .brand { font-weight: 650; letter-spacing: -.02em; margin-right: .4rem; 
 nav.top a { color: var(--muted); font-size: .9rem; }
 nav.top a.active { color: var(--text); font-weight: 550; }
 nav.top form { margin-left: auto; }
+/* The links sit in the header row on a wide screen... */
+nav.top .links { display: contents; }
+/* ...and on a phone get a row of their own that scrolls sideways, instead of
+   wrapping to four lines and pushing the page a quarter-screen down. */
+@media (max-width: 640px) {
+  nav.top .inner { gap: .45rem 1rem; padding: .55rem 1rem; }
+  nav.top .links {
+    display: flex; gap: 1.1rem; order: 3; flex: 1 0 100%; position: relative;
+    overflow-x: auto; white-space: nowrap; scrollbar-width: none; padding-bottom: .15rem;
+  }
+  nav.top .links::-webkit-scrollbar { display: none; }
+}
 
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: .75rem; }
 .kpi {
